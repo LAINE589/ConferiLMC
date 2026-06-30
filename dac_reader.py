@@ -51,14 +51,31 @@ def _ler_pdf(arquivo_bytes):
         if len(texto) < 50:
             return None  # PDF escaneado/imagem — sem texto extraível
 
+        # Tentar parser "Relatório DAC Referente ao Mês" (variante legível: Tulemon, Gol)
+        if re.search(r'RELAT[ÓO]RIO\s*DAC\s*REFERENTE\s*AO\s*M[ÊE]S', texto, re.I):
+            resultado = _parse_relatorio_dac_mes(texto)
+            if resultado["tanques"] or resultado["bicos"]:
+                return resultado
+
+        # Tentar parser "Resumo do Livro de Movimentação (R-LMC)" - multi-página por tanque
+        if re.search(r'RESUMO\s*DO\s*LIVRO\s*DE\s*MOVIMENTA[ÇC][ÃA]O', texto, re.I):
+            resultado = _parse_resumo_lmc(texto)
+            if resultado["tanques"] or resultado["bicos"]:
+                return resultado
+
         # Tentar parser "Resumo DAC" primeiro (formato com 1 linha por bico/tanque)
         if re.search(r'Resumo\s*DAC', texto, re.I):
             resultado = _parse_resumo_dac(texto)
             if resultado["tanques"] or resultado["bicos"]:
                 return resultado
 
-        # Tentar parser "Declaração de Atividades" (campos verticalizados em blocos fixos)
+        # Tentar parser "Declaração de Atividades" - duas variantes:
+        # 1) linear (1 linha por bico/tanque, ex: GrupoZL)
+        # 2) verticalizada (campos em linhas separadas, ex: outro sistema)
         if re.search(r'DECLARA[ÇC][ÃA]O\s*DE\s*ATIVIDADES', texto, re.I):
+            resultado = _parse_declaracao_linear(texto)
+            if resultado["tanques"] or resultado["bicos"]:
+                return resultado
             resultado = _parse_declaracao_atividades(texto)
             if resultado["tanques"] or resultado["bicos"]:
                 return resultado
@@ -273,6 +290,269 @@ def _parse_declaracao_atividades(texto):
     return {"competencia": competencia, "tanques": tanques, "bicos": bicos}
 
 
+# ── PARSER FORMATO "DECLARAÇÃO DE ATIVIDADES - LINEAR" (1 linha por item) ────
+def _parse_declaracao_linear(texto):
+    """
+    Parser para variante do formato 'Declaração de Atividades do Contribuinte'
+    onde cada bico/tanque está em UMA linha (ex: GrupoZL):
+      Bomba Bico Tanque Combustível EncIni EncFim SemInterv ComInterv Aferição
+      Tanque Item Capacidade EstAbert Recebim Vendas EstFech Perda/Sobra Var%
+    """
+    tanques = []
+    bicos   = []
+    competencia = ""
+
+    m = re.search(r'(\d{2}/\d{2}/\d{4})\s+at[ée]\s+(\d{2}/\d{2}/\d{4})', texto)
+    if m:
+        dt_fin = m.group(2)
+        meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        try: competencia = f"{meses[int(dt_fin[3:5])-1]}/{dt_fin[6:]}"
+        except: competencia = dt_fin
+
+    num = r'-?[\d\.]+,\d+'
+
+    # BICOS: "1 1 3 DIESEL S-10 ADITIVADO 79.717,887 82.342,868 2.624,981 0,000 0,000"
+    bico_pat = re.compile(
+        r'^(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+([A-ZÀ-Úa-zà-ú0-9\- ]+?)\s+(' + num + r')\s+(' + num + r')\s+(' + num + r')\s+(' + num + r')\s+(' + num + r')\s*$'
+    )
+    ids_vistos = set()
+    for linha in texto.splitlines():
+        l = linha.strip()
+        m = bico_pat.match(l)
+        if m:
+            bico_id = _nid(m.group(2))
+            enc_ini = _fl(m.group(5))
+            enc_fin = _fl(m.group(6))
+            if bico_id not in ids_vistos and enc_ini is not None and enc_fin is not None:
+                bicos.append({"id": bico_id, "encerrante_inicial": enc_ini, "encerrante_final": enc_fin})
+                ids_vistos.add(bico_id)
+
+    # TANQUES: "1 DIESEL S-10 ADITIVADO 3.631,000 49.700,000 53.282,813 123,000 74,813 1,96220.000,00"
+    # Ordem: id, produto..., EstAbert, Recebim, Vendas, EstFech, Perda/Sobra, Var%(+Capacidade colada no fim)
+    tanque_pat = re.compile(
+        r'^(\d{1,2})\s+([A-ZÀ-Úa-zà-ú0-9\- ]+?)\s+(' + num + r')\s+(' + num + r')\s+(' + num + r')\s+(-?' + num + r')\s+(-?' + num + r')\s+(-?[\d\.]+,\d+)'
+    )
+    ids_t = set()
+    em_tanques = False
+    for linha in texto.splitlines():
+        l = linha.strip()
+        if re.search(r'MOVIMENTA[ÇC][ÃA]O\s*POR\s*TANQUE', l, re.I):
+            em_tanques = True; continue
+        if re.search(r'MOVIMENTA[ÇC][ÃA]O\s*POR\s*CFOP', l, re.I):
+            em_tanques = False; continue
+        if not em_tanques: continue
+        m = tanque_pat.match(l)
+        if m:
+            tid = _nid(m.group(1))
+            if tid in ids_t: continue
+            produto   = m.group(2).strip()
+            est_abert = _fl(m.group(3))
+            est_fech  = _fl(m.group(5))
+            if est_abert is not None and est_fech is not None:
+                tanques.append({"id": tid, "produto": produto,
+                                "estoque_inicial": est_abert, "estoque_final": est_fech})
+                ids_t.add(tid)
+
+    return {"competencia": competencia, "tanques": tanques, "bicos": bicos}
+
+
+# ── PARSER FORMATO "RESUMO DO LIVRO DE MOVIMENTAÇÃO (R-LMC)" ─────────────────
+def _parse_resumo_lmc(texto):
+    """
+    Parser para o formato 'RESUMO DO LIVRO DE MOVIMENTAÇÃO DE COMBUSTÍVEIS (R-LMC)'.
+    Multi-página: uma página (ou bloco) por tanque, contendo:
+      - 3.1) Estoque de Abertura (do tanque, primeiro dia do período)
+      - 7) Estoque de Fechamento (do tanque, último dia do período)
+      - 5) Volume Vendido por Bico: TQ, Bico, Fechamento, Abertura, Aferições, VendasBico
+      - TANQUE - Nº: X (identifica o tanque)
+    Considera apenas abertura/fechamento (ignora notas fiscais e detalhes diários).
+    """
+    tanques = []
+    bicos   = []
+    competencia = ""
+
+    num = r'-?[\d\.]+,\d+'
+
+    m = re.search(r'D\.\s*Final\s*\n?\s*(\d{2}/\d{2}/\d{4})', texto)
+    if not m:
+        m = re.search(r'(\d{2}/\d{2}/\d{4})\s*\n?\s*D\.\s*Final', texto)
+    datas = re.findall(r'(\d{2}/\d{2}/\d{4})', texto[:400])
+    if len(datas) >= 2:
+        dt_fin = datas[1]
+        meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        try: competencia = f"{meses[int(dt_fin[3:5])-1]}/{dt_fin[6:]}"
+        except: competencia = dt_fin
+
+    # Identificar blocos por "TANQUE - Nº: X" (cada bloco = 1 tanque consolidado)
+    # O nome do produto fica ANTES de "1) Produto", então cortamos incluindo
+    # o texto residual do bloco anterior (overlap) para capturar o produto certo.
+    marcadores = [m.start() for m in re.finditer(r'1\)\s*Produto', texto)]
+    blocos = []
+    for i, pos in enumerate(marcadores):
+        fim = marcadores[i+1] if i+1 < len(marcadores) else len(texto)
+        blocos.append(texto[pos:fim])
+    # Produto de cada bloco = últimas linhas não vazias do texto ANTES do marcador
+    produtos_antes = []
+    for i, pos in enumerate(marcadores):
+        inicio_busca = marcadores[i-1] if i>0 else 0
+        trecho_antes = texto[inicio_busca:pos]
+        m_prod = re.search(r'([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú0-9 \-]{3,})\s*\n\s*2\)\s*D\.\s*Inicial', trecho_antes)
+        produtos_antes.append(m_prod.group(1).strip() if m_prod else "")
+
+    bicos_vistos = set()
+
+    for idx_bloco, bloco in enumerate(blocos):
+        produto = produtos_antes[idx_bloco] if idx_bloco < len(produtos_antes) else ""
+
+        # Número do tanque: "TANQUE - Nº: 5"
+        m_tq = re.search(r'TANQUE\s*-\s*N[ºo]:\s*(\d+)', bloco)
+        if not m_tq:
+            continue
+        tanque_id = _nid(m_tq.group(1))
+
+        # 3.1) Estoque de Abertura
+        m_ea = re.search(r'3\.1\)\s*Estoque\s*de\s*Abertura\s*\n?\s*(' + num + r')', bloco)
+        est_abert = _fl(m_ea.group(1)) if m_ea else None
+
+        # 7) Estoque de Fechamento (9.1)
+        m_ef = re.search(r'7\)\s*Estoque\s*de\s*Fechamento\s*\(9\.1\)\s*\n?\s*(' + num + r')', bloco)
+        est_fech = _fl(m_ef.group(1)) if m_ef else None
+
+        if est_abert is not None and est_fech is not None:
+            ids_existentes = [t['id'] for t in tanques]
+            if tanque_id not in ids_existentes:
+                tanques.append({
+                    "id": tanque_id, "produto": produto,
+                    "estoque_inicial": est_abert, "estoque_final": est_fech,
+                })
+
+        # ── Bicos do bloco: "5\n1\n1.472.864,980\n1.457.391,490\n0,000\n15.473,490"
+        # Ordem: TQ, Bico, Fechamento, Abertura, Aferições, VendasBico
+        idx_v = bloco.find('5) Volume Vendido')
+        idx_p = bloco.find('8) Perdas')
+        if idx_v == -1: continue
+        sub = bloco[idx_v: idx_p if idx_p > idx_v else idx_v+2000]
+        linhas_sub = [l.strip() for l in sub.splitlines() if l.strip()]
+
+        int_re = re.compile(r'^\d{1,3}$')
+        num_re = re.compile(r'^' + num + r'$')
+
+        # Localizar início dos dados (pula cabeçalho textual)
+        start = None
+        for j in range(len(linhas_sub)-5):
+            if (int_re.match(linhas_sub[j]) and int_re.match(linhas_sub[j+1])
+                and num_re.match(linhas_sub[j+2]) and num_re.match(linhas_sub[j+3])):
+                start = j
+                break
+        if start is None:
+            continue
+
+        k = start
+        while k+5 < len(linhas_sub):
+            tq_b   = linhas_sub[k]
+            bico_b = linhas_sub[k+1]
+            fech_b = linhas_sub[k+2]
+            aber_b = linhas_sub[k+3]
+            afer_b = linhas_sub[k+4]
+            vend_b = linhas_sub[k+5]
+            if not (int_re.match(tq_b) and int_re.match(bico_b) and num_re.match(fech_b) and num_re.match(aber_b)):
+                break
+            bico_id = _nid(bico_b)
+            enc_fin = _fl(fech_b)
+            enc_ini = _fl(aber_b)
+            if bico_id not in bicos_vistos and enc_ini is not None and enc_fin is not None:
+                bicos.append({
+                    "id": bico_id,
+                    "encerrante_inicial": enc_ini,
+                    "encerrante_final":   enc_fin,
+                })
+                bicos_vistos.add(bico_id)
+            k += 6
+
+    return {"competencia": competencia, "tanques": tanques, "bicos": bicos}
+
+
+# ── PARSER FORMATO "RELATÓRIO DAC REFERENTE AO MÊS" (Tulemon/Gol legível) ────
+def _parse_relatorio_dac_mes(texto):
+    """
+    Parser para variante legível do 'RELATÓRIO DAC REFERENTE AO MÊS: MM/AAAA'.
+
+    BICOS (uma linha por bico, dentro de blocos "Combustível: ..."):
+      "1 1.191.301,23 1.213.535,89 20,003 794316 22.234,66 0,00"
+       id  abertura      fechamento   afer+TQ  num_serie  s/interv  c/interv
+
+    TANQUES (uma linha por tanque):
+      "1 ETANOL HIDRATADO COMUM 3.573,94 3.950,71 55.000,00 13,22ETA"
+       id   produto              est_abert  est_fech   recebido  perda/sobra+sigla
+    """
+    tanques = []
+    bicos   = []
+    competencia = ""
+
+    m = re.search(r'REFERENTE\s*AO\s*M[ÊE]S:\s*(\d{2})/(\d{4})', texto, re.I)
+    if m:
+        meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        try: competencia = f"{meses[int(m.group(1))-1]}/{m.group(2)}"
+        except: competencia = f"{m.group(1)}/{m.group(2)}"
+
+    num = r'-?[\d\.]+,\d+'
+
+    # ── BICOS ─────────────────────────────────────────────────────────────────
+    # "1 1.191.301,23 1.213.535,89 20,003 794316 22.234,66 0,00"
+    bico_pat = re.compile(
+        r'^(\d{1,2})\s+(' + num + r')\s+(' + num + r')\s+' + num + r'(\d{1,2})\s+(\w+)\s+(' + num + r')\s+(' + num + r')\s*$'
+    )
+    ids_vistos = set()
+    em_bicos = False
+    for linha in texto.splitlines():
+        l = linha.strip()
+        if re.search(r'INFORMA[ÇC][ÕO]ES\s*MENSAIS\s*DOS\s*ENCERRANTES', l, re.I):
+            em_bicos = True; continue
+        if re.search(r'INFORMA[ÇC][ÕO]ES\s*MENSAIS\s*DOS\s*ESTOQUES', l, re.I):
+            em_bicos = False; continue
+        if not em_bicos: continue
+        m2 = bico_pat.match(l)
+        if m2:
+            bico_id = _nid(m2.group(1))
+            enc_ini = _fl(m2.group(2))
+            enc_fin = _fl(m2.group(3))
+            if bico_id not in ids_vistos and enc_ini is not None and enc_fin is not None:
+                bicos.append({
+                    "id": bico_id,
+                    "encerrante_inicial": enc_ini,
+                    "encerrante_final":   enc_fin,
+                })
+                ids_vistos.add(bico_id)
+
+    # ── TANQUES ───────────────────────────────────────────────────────────────
+    # "1 ETANOL HIDRATADO COMUM 3.573,94 3.950,71 55.000,00 13,22ETA"
+    tanque_pat = re.compile(
+        r'^(\d{1,2})\s+([A-ZÀ-Úa-zà-ú0-9 \-]+?)\s+(' + num + r')\s+(' + num + r')\s+(' + num + r')\s+(-?[\d\.]+,\d{2})[A-Z0-9]{2,4}\s*$'
+    )
+    ids_t = set()
+    em_tanques = False
+    for linha in texto.splitlines():
+        l = linha.strip()
+        if re.search(r'INFORMA[ÇC][ÕO]ES\s*MENSAIS\s*DOS\s*ESTOQUES', l, re.I):
+            em_tanques = True; continue
+        if re.search(r'^P[áa]gina', l, re.I):
+            em_tanques = False; continue
+        if not em_tanques: continue
+        m3 = tanque_pat.match(l)
+        if m3:
+            tid = _nid(m3.group(1))
+            if tid in ids_t: continue
+            produto   = m3.group(2).strip()
+            est_abert = _fl(m3.group(3))
+            est_fech  = _fl(m3.group(4))
+            if est_abert is not None and est_fech is not None:
+                tanques.append({"id": tid, "produto": produto,
+                                "estoque_inicial": est_abert, "estoque_final": est_fech})
+                ids_t.add(tid)
+
+    return {"competencia": competencia, "tanques": tanques, "bicos": bicos}
+
+
 # ── PARSER UNIVERSAL ──────────────────────────────────────────────────────────
 def _parse_texto(texto):
     """
@@ -314,8 +594,8 @@ def _parse_texto(texto):
         if re.search(r'^(Bico|Inicial|Final|Litros|Afer|Venda|Pre[çc]|Desc|Valor|Total)', l, re.I):
             continue
 
-        # Linha de bico: começa com número seguido de letras (ex: "01 GC", "02 OGC")
-        m = re.match(r'^(\d{1,2})\s+[A-Z]{1,4}$', l)
+        # Linha de bico: começa com número seguido de letras/dígitos (ex: "01 GC", "02 0GC")
+        m = re.match(r'^(\d{1,2})\s+[A-Z0-9]{1,5}$', l)
         if m:
             bico_buffer = [m.group(1)]  # novo bico
             continue
