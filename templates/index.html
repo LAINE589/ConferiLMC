@@ -147,20 +147,22 @@
   <div class="card">
     <h2><span class="num">1</span> Selecione os arquivos SPED Fiscal (.txt)</h2>
     <div class="mes-tags">
-      <div class="mes-tag"><span class="dot dot-ant"></span>Competência Anterior</div>
-      <div class="mes-tag"><span class="dot dot-atu"></span>Competência Atual</div>
+      <div class="mes-tag"><span class="dot dot-ant"></span>Competência Anterior (opcional)</div>
+      <div class="mes-tag"><span class="dot dot-atu"></span>Competência Atual (obrigatória)</div>
     </div>
     <p style="font-size:.76rem;color:#6b7a99;margin-bottom:16px;margin-top:4px;">
-      Versão e Capacidade dos Tanques são verificadas apenas na competência atual.
+      Versão e Capacidade dos Tanques são verificadas apenas na competência atual.<br>
+      Se a competência anterior não for enviada, o sistema confronta apenas o mês atual
+      (consistência diária, negativos, ANP e DAC × SPED) — sem o confronto entre meses.
     </p>
 
     <form id="form-lmc" action="/processar" method="POST" enctype="multipart/form-data">
       <div class="uploads">
         <div class="upload-box" id="box-ant" ondragover="drag(event,'ant')" ondragleave="undrag('ant')" ondrop="drop(event,'ant')">
-          <input type="file" name="ant" accept=".txt" onchange="pick(event,'ant')" required>
+          <input type="file" name="ant" accept=".txt" onchange="pick(event,'ant')">
           <div class="upload-icon" id="icon-ant">📂</div>
           <div class="upload-label">Competência Anterior</div>
-          <div class="upload-sub">Ex.: SPED abril/2026</div>
+          <div class="upload-sub">Ex.: SPED abril/2026 (opcional)</div>
           <div class="upload-name" id="name-ant"></div>
         </div>
         <div class="upload-box" id="box-atu" ondragover="drag(event,'atu')" ondragleave="undrag('atu')" ondrop="drop(event,'atu')">
@@ -253,12 +255,14 @@ function marcarArquivo(key, nome) {
 function atualizarBtn() {
   const btn = document.getElementById('btn-gerar');
   const txt = document.getElementById('btn-txt');
-  const ok  = selecionados.ant && selecionados.atu;
+  // Apenas a competência atual é obrigatória; a anterior é opcional.
+  const ok  = selecionados.atu;
   btn.disabled = !ok;
-  if (ok)              txt.textContent = 'Gerar Relatório Excel';
-  else if (!selecionados.ant && !selecionados.atu)
-                       txt.textContent = 'Selecione os dois arquivos para continuar';
-  else                 txt.textContent = 'Selecione também o outro arquivo SPED';
+  if (selecionados.ant && selecionados.atu)
+                       txt.textContent = 'Gerar Relatório Excel';
+  else if (selecionados.atu)
+                       txt.textContent = 'Gerar Relatório (sem confronto entre meses)';
+  else                 txt.textContent = 'Selecione ao menos a competência atual';
 }
 function iniciarProcessamento() {
   document.getElementById('loading').classList.add('ativo');
