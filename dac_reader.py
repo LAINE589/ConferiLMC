@@ -347,7 +347,7 @@ def _parse_declaracao_linear(texto):
             if tid in ids_t: continue
             produto   = m.group(2).strip()
             est_abert = _fl(m.group(3))
-            est_fech  = _fl(m.group(5))
+            est_fech  = _fl(m.group(6))
             if est_abert is not None and est_fech is not None:
                 tanques.append({"id": tid, "produto": produto,
                                 "estoque_inicial": est_abert, "estoque_final": est_fech})
