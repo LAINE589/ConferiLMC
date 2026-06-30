@@ -57,6 +57,12 @@ def _ler_pdf(arquivo_bytes):
             if resultado["tanques"] or resultado["bicos"]:
                 return resultado
 
+        # Tentar parser "Declaração de Atividades" (campos verticalizados em blocos fixos)
+        if re.search(r'DECLARA[ÇC][ÃA]O\s*DE\s*ATIVIDADES', texto, re.I):
+            resultado = _parse_declaracao_atividades(texto)
+            if resultado["tanques"] or resultado["bicos"]:
+                return resultado
+
         # Fallback: parser AutoSystem PRO (multi-linha por campo)
         resultado = _parse_texto(texto)
         if resultado["tanques"] or resultado["bicos"]:
@@ -143,6 +149,126 @@ def _parse_resumo_dac(texto):
                     "estoque_inicial": ini,
                     "estoque_final":   fin,
                 })
+
+    return {"competencia": competencia, "tanques": tanques, "bicos": bicos}
+
+
+# ── PARSER FORMATO "RELATÓRIO DE DECLARAÇÃO DE ATIVIDADES" (campos verticais) ─
+def _parse_declaracao_atividades(texto):
+    """
+    Parser para o formato 'RELATÓRIO DE DECLARAÇÃO DE ATIVIDADES DO CONTRIBUINTE'.
+    Cada campo de uma linha de tabela vem em uma linha separada do PDF
+    (extração verticalizada), em blocos de tamanho fixo:
+
+      BICO (10 linhas/bico): Lacre, Aferição, ComInterv, Bomba,
+                              EncFinal, EncInicial, Combustível, Tanque, Bico, SemInterv
+
+      TANQUE (7 linhas/tanque): PerdaSobra, EstFechamento, Vendas,
+                                 Recebimentos, EstAbertura, Item, Tanque
+    """
+    tanques = []
+    bicos   = []
+    competencia = ""
+
+    datas = re.findall(r"(\d{2}/\d{2}/\d{4})", texto[:600])
+    if len(datas) >= 2:
+        dt_fin = datas[1]
+        meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        try:
+            competencia = f"{meses[int(dt_fin[3:5])-1]}/{dt_fin[6:]}"
+        except:
+            competencia = dt_fin
+
+    linhas = [l.strip() for l in texto.splitlines()]
+    num_re = re.compile(r'^-?[\d\.]+,\d+$')
+    int_re = re.compile(r'^\d+$')
+
+    # ── Seção BICO ────────────────────────────────────────────────────────────
+    idx_bico_start = next((i for i,l in enumerate(linhas) if 'MOVIMENTA' in l.upper() and 'BICO' in l.upper()), None)
+    idx_bico_end   = next((i for i,l in enumerate(linhas) if 'MOVIMENTA' in l.upper() and 'TANQUE' in l.upper()), None)
+
+    if idx_bico_start is not None and idx_bico_end is not None:
+        bloco = linhas[idx_bico_start:idx_bico_end]
+        # Pular cabeçalho (achar primeira linha que é um inteiro pequeno = Lacre)
+        # Avançamos até encontrar o primeiro grupo de 10 valores de dados
+        i = 0
+        # Localizar onde os dados começam: primeiro token que é número inteiro
+        # seguido pelos padrões esperados. Vamos escanear em janelas de 10.
+        dados = [l for l in bloco if l]  # remove vazios
+        # Remover cabeçalho textual (tudo antes do primeiro valor numérico isolado
+        # que aparece logo seguido por um número decimal)
+        start_idx = None
+        for j in range(len(dados)-1):
+            if int_re.match(dados[j]) and num_re.match(dados[j+1]):
+                start_idx = j
+                break
+        if start_idx is not None:
+            grupo = dados[start_idx:]
+            # Processar em blocos de 10
+            for k in range(0, len(grupo)-9, 10):
+                bloco10 = grupo[k:k+10]
+                try:
+                    lacre      = bloco10[0]
+                    aferic     = bloco10[1]
+                    cominterv  = bloco10[2]
+                    bomba      = bloco10[3]
+                    enc_final  = _fl(bloco10[4])
+                    enc_inicial= _fl(bloco10[5])
+                    combustivel= bloco10[6]
+                    tanque_id  = bloco10[7]
+                    bico_id    = bloco10[8]
+                    seminterv  = bloco10[9]
+                    if not int_re.match(bico_id):
+                        continue
+                    if enc_inicial is not None and enc_final is not None:
+                        bicos.append({
+                            "id": _nid(bico_id),
+                            "encerrante_inicial": enc_inicial,
+                            "encerrante_final":   enc_final,
+                        })
+                except (IndexError, ValueError):
+                    continue
+
+    # ── Seção TANQUE ──────────────────────────────────────────────────────────
+    idx_tanque_start = idx_bico_end
+    idx_tanque_end = next((i for i,l in enumerate(linhas) if 'MOVIMENTA' in l.upper() and 'CFOP' in l.upper()), len(linhas))
+
+    if idx_tanque_start is not None:
+        bloco = linhas[idx_tanque_start:idx_tanque_end]
+        dados = [l for l in bloco if l]
+        # Localizar início dos dados: primeiro valor decimal (pode ser negativo)
+        # seguido pelo padrão de 7 campos terminando em um inteiro pequeno (tanque)
+        start_idx = None
+        for j in range(len(dados)-6):
+            if num_re.match(dados[j]):
+                # verificar se 6 posições à frente é um inteiro pequeno (tanque 1-99)
+                cand = dados[j+6]
+                if int_re.match(cand) and int(cand) <= 99:
+                    start_idx = j
+                    break
+        if start_idx is not None:
+            grupo = dados[start_idx:]
+            for k in range(0, len(grupo)-6, 7):
+                bloco7 = grupo[k:k+7]
+                try:
+                    perda_sobra = _fl(bloco7[0])
+                    est_fech    = _fl(bloco7[1])
+                    vendas      = _fl(bloco7[2])
+                    recebim     = _fl(bloco7[3])
+                    est_abert   = _fl(bloco7[4])
+                    item        = bloco7[5]
+                    tanque_id   = bloco7[6]
+                    if not int_re.match(tanque_id):
+                        continue
+                    if est_abert is not None and est_fech is not None:
+                        tanques.append({
+                            "id": _nid(tanque_id),
+                            "produto": item,
+                            "estoque_inicial": est_abert,
+                            "estoque_final":   est_fech,
+                        })
+                except (IndexError, ValueError):
+                    continue
 
     return {"competencia": competencia, "tanques": tanques, "bicos": bicos}
 
