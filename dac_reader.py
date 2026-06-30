@@ -8,8 +8,11 @@ Suporta:
 import io, re, json
 
 def _fl(v):
-    """Converte string brasileira para float: '1.234,56' → 1234.56"""
+    """Converte para float. Aceita number nativo (int/float, ex: do openpyxl)
+    OU string no formato brasileiro: '1.234,56' -> 1234.56"""
     if v is None: return None
+    if isinstance(v, (int, float)):
+        return float(v)
     v = str(v).strip().replace(".", "").replace(",", ".")
     try: return float(v)
     except: return None
@@ -322,8 +325,8 @@ def _parse_excel_estruturado(arquivo_bytes):
             # [Serie, Bico, Produto, '', Abertura, Fechamento]
             bid_raw = str(row[1]).strip() if row[1] is not None else ""
             if bid_raw.isdigit() and bid_raw not in bicos_vistos:
-                ini = _fl(str(row[4])) if len(row)>4 and row[4] is not None else None
-                fin = _fl(str(row[5])) if len(row)>5 and row[5] is not None else None
+                ini = _fl(row[4]) if len(row)>4 and row[4] is not None else None
+                fin = _fl(row[5]) if len(row)>5 and row[5] is not None else None
                 if ini is not None and fin is not None:
                     bicos.append({"id":_nid(bid_raw),"encerrante_inicial":ini,"encerrante_final":fin})
                     bicos_vistos.add(bid_raw)
@@ -333,8 +336,8 @@ def _parse_excel_estruturado(arquivo_bytes):
             tid_raw = c0
             if tid_raw.isdigit():
                 produto = c1
-                ini = _fl(str(row[4])) if row[4] is not None else None
-                fin = _fl(str(row[7])) if len(row)>7 and row[7] is not None else None
+                ini = _fl(row[4]) if row[4] is not None else None
+                fin = _fl(row[7]) if len(row)>7 and row[7] is not None else None
                 if ini is not None and fin is not None:
                     tanques.append({"id":_nid(tid_raw),"produto":produto,
                                     "estoque_inicial":ini,"estoque_final":fin})
