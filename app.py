@@ -93,19 +93,34 @@ def processar():
     arq_ant = request.files.get("ant")
     arq_atu = request.files.get("atu")
 
-    if not arq_ant or not arq_atu:
-        flash("Selecione os dois arquivos SPED.", "danger")
+    # SPED da competência anterior agora é opcional.
+    # Se ausente, o sistema confronta apenas o mês atual com o DAC,
+    # mantendo consistência diária, negativos, versão/capacidade e ANP.
+    tem_ant = bool(arq_ant and arq_ant.filename)
+
+    if not arq_atu or not arq_atu.filename:
+        flash("Selecione ao menos o arquivo SPED da competência atual.", "danger")
         return redirect(url_for("index"))
 
     try:
-        bytes_ant = arq_ant.read()
         bytes_atu = arq_atu.read()
+        d_atu = ler_sped_bytes(bytes_atu)
 
-        d_ant   = ler_sped_bytes(bytes_ant)
-        d_atu   = ler_sped_bytes(bytes_atu)
+        if tem_ant:
+            bytes_ant = arq_ant.read()
+            d_ant   = ler_sped_bytes(bytes_ant)
+            neg_abr = verificar_negativos_bytes(bytes_ant)
+        else:
+            # Estrutura vazia equivalente — confronto_mensal já trata isso
+            # retornando listas vazias quando não há dados do mês anterior.
+            d_ant   = {"info": {}, "tanques": {}, "bicos": {}}
+            neg_abr = {"tanques": [], "bicos": []}
+            flash("SPED da competência anterior não enviado — gerando apenas a "
+                  "conferência da competência atual (sem confronto entre meses).",
+                  "warning")
+
         conf_m  = confronto_mensal(d_ant, d_atu)
         d_mai   = confronto_diario(d_atu)
-        neg_abr = verificar_negativos_bytes(bytes_ant)
         neg_mai = verificar_negativos_bytes(bytes_atu)
         vc_mai  = verificar_versao_capacidade(d_atu)
 
@@ -477,8 +492,12 @@ def aba_resumo(ws, conf_m, d_mai, info_ant, info_atu, neg_abr, neg_mai, vc_mai):
     _titulo(ws,1,"CONFERÊNCIA LMC – LIVRO DE MOVIMENTAÇÃO DE COMBUSTÍVEIS",N,sz=13)
     ws.row_dimensions[1].height=30
     ia=info_ant["info"]; iu=info_atu["info"]
-    for i,(a,e) in enumerate([(f"Empresa: {ia.get('razao','')}", f"CNPJ: {ia.get('cnpj','')}"),
-        (f"Competência anterior: {ia.get('dt_ini','')} a {ia.get('dt_fin','')}", f"Competência atual: {iu.get('dt_ini','')} a {iu.get('dt_fin','')}"),
+    razao_emp = ia.get('razao','') or iu.get('razao','')
+    cnpj_emp  = ia.get('cnpj','')  or iu.get('cnpj','')
+    comp_ant_txt = (f"{ia.get('dt_ini','')} a {ia.get('dt_fin','')}"
+                    if ia.get('dt_ini') else "Não enviado (apenas competência atual)")
+    for i,(a,e) in enumerate([(f"Empresa: {razao_emp}", f"CNPJ: {cnpj_emp}"),
+        (f"Competência anterior: {comp_ant_txt}", f"Competência atual: {iu.get('dt_ini','')} a {iu.get('dt_fin','')}"),
         (f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", "")], start=2):
         ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
         c1=ws.cell(row=i,column=1,value=a); c1.font=Font(name="Arial",bold=(i==2),size=10)
@@ -516,19 +535,24 @@ def aba_resumo(ws, conf_m, d_mai, info_ant, info_atu, neg_abr, neg_mai, vc_mai):
 
     # 1. CONFRONTO MENSAL
     _subtit(ws,row,"1.  CONFRONTO ENTRE MESES  –  Fechamento Anterior × Abertura Atual",N); row+=1
-    for i,h in enumerate(["Tipo","ID","Data Fech.","Valor Fech.","Data Aber.","Valor Aber.","Status"],1):
-        _ch(ws,row,i,h,bg=C_CINZA,fg=C_AZUL_ESC)
-    ws.row_dimensions[row].height=22; row+=1
-    for tipo, lista in [("Tanque", conf_m["tanques"]), ("Bico", conf_m["bicos"])]:
-        for x in lista:
-            bg=_row_bg(x["status"])
-            _dc(ws,row,1,tipo,bg=bg)
-            _dc(ws,row,2,f"{tipo} {x['id']}",bg=bg)
-            _dc(ws,row,3,x["dt_fech"].strftime("%d/%m/%Y") if x.get("dt_fech") else "",bg=bg)
-            _dc(ws,row,4,x["fech"],NF,bg=bg)
-            _dc(ws,row,5,x["dt_aber"].strftime("%d/%m/%Y") if x.get("dt_aber") else "",bg=bg)
-            _dc(ws,row,6,x["aber"],NF,bg=bg); _sc(ws,row,7,x["status"])
-            ws.row_dimensions[row].height=15; row+=1
+    sem_anterior = not conf_m["tanques"] and not conf_m["bicos"]
+    if sem_anterior:
+        row=bloco_ok(row, "SPED da competência anterior não enviado — confronto entre meses não realizado. "
+                          "Conferência abaixo considera apenas a competência atual.")
+    else:
+        for i,h in enumerate(["Tipo","ID","Data Fech.","Valor Fech.","Data Aber.","Valor Aber.","Status"],1):
+            _ch(ws,row,i,h,bg=C_CINZA,fg=C_AZUL_ESC)
+        ws.row_dimensions[row].height=22; row+=1
+        for tipo, lista in [("Tanque", conf_m["tanques"]), ("Bico", conf_m["bicos"])]:
+            for x in lista:
+                bg=_row_bg(x["status"])
+                _dc(ws,row,1,tipo,bg=bg)
+                _dc(ws,row,2,f"{tipo} {x['id']}",bg=bg)
+                _dc(ws,row,3,x["dt_fech"].strftime("%d/%m/%Y") if x.get("dt_fech") else "",bg=bg)
+                _dc(ws,row,4,x["fech"],NF,bg=bg)
+                _dc(ws,row,5,x["dt_aber"].strftime("%d/%m/%Y") if x.get("dt_aber") else "",bg=bg)
+                _dc(ws,row,6,x["aber"],NF,bg=bg); _sc(ws,row,7,x["status"])
+                ws.row_dimensions[row].height=15; row+=1
     row+=1
 
     # 2. CONSISTÊNCIA DIÁRIA
@@ -618,8 +642,22 @@ def aba_mensal(ws, conf_m, info_ant, info_atu):
         except:
             return dt
 
-    comp_ant = fmt_comp(info_ant["info"].get("dt_fin", ""))
+    comp_ant = fmt_comp(info_ant["info"].get("dt_fin", "")) or "—"
     comp_atu = fmt_comp(info_atu["info"].get("dt_fin", ""))
+
+    if not conf_m["tanques"] and not conf_m["bicos"]:
+        _titulo(ws, r, "CONFRONTO ENTRE MESES", 6, sz=13); r += 2
+        cel = ws.cell(row=r, column=1,
+            value="⚠️  SPED da competência anterior não foi enviado. "
+                  "Não é possível confrontar o fechamento do mês anterior com a abertura "
+                  "do mês atual. Consulte as demais abas para a conferência da competência atual.")
+        cel.font = Font(name="Arial", size=11, bold=True, color=C_AMAR_FG)
+        cel.fill = PatternFill("solid", start_color=C_AMAR_BG)
+        cel.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        ws.merge_cells(start_row=r, start_column=1, end_row=r+2, end_column=6)
+        ws.row_dimensions[r].height=60
+        ws.column_dimensions["A"].width=90
+        return
 
     for secao, lista, tipo, lbl_fech_ant, lbl_aber_atu, lbl_fech_atu in [
         ("TANQUES – Confronto Competência Anterior × Atual (Reg. 1310)",
