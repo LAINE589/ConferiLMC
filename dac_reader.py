@@ -47,9 +47,101 @@ def _ler_pdf(arquivo_bytes):
         texto = texto.strip()
         if len(texto) < 50:
             return None  # PDF escaneado/imagem — sem texto extraível
-        return _parse_texto(texto)
+
+        # Tentar parser "Resumo DAC" primeiro (formato com 1 linha por bico/tanque)
+        if re.search(r'Resumo\s*DAC', texto, re.I):
+            resultado = _parse_resumo_dac(texto)
+            if resultado["tanques"] or resultado["bicos"]:
+                return resultado
+
+        # Fallback: parser AutoSystem PRO (multi-linha por campo)
+        resultado = _parse_texto(texto)
+        if resultado["tanques"] or resultado["bicos"]:
+            return resultado
+
+        return None
     except Exception:
         return None
+
+
+# ── PARSER FORMATO "RESUMO DAC" (uma linha por bico/tanque) ──────────────────
+def _parse_resumo_dac(texto):
+    """
+    Parser para o formato 'Resumo DAC' onde cada bico/tanque está em UMA linha:
+      Bomba Bico Combustível Enc.Inicial Enc.Final Vol.semInt. Aferição Vol.comInt.
+      Tanque Combustível Est.Abertura Est.Fechamento Vol.Recebido Faltas/Sobras
+    """
+    tanques = []
+    bicos   = []
+    competencia = ""
+
+    # Competência
+    m = re.search(r'[Pp]er[íi]odo\s+de\s+apura[çc][ãa]o[:\s]+(\d{2}/\d{2}/\d{4})\s+at[ée]\s+(\d{2}/\d{2}/\d{4})', texto)
+    if m:
+        dt_fin = m.group(2)
+        meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        try:
+            mes = int(dt_fin[3:5]); ano = dt_fin[6:]
+            competencia = f"{meses[mes-1]}/{ano}"
+        except:
+            competencia = dt_fin
+
+    num = r'-?[\d\.]+,\d+'  # número brasileiro: 1.234,567 ou -123,456
+
+    # ── BICOS: "001 001 GASOLINA COMUM 1.655.772,200 1.681.591,360 0,000 25.819,160 1,211"
+    # Padrão: bomba(3) bico(3) PRODUTO(palavras) num num num num num
+    bico_pat = re.compile(
+        r'^(\d{2,3})\s+(\d{2,3})\s+([A-ZÀ-Ú0-9 ]+?)\s+(' + num + r')\s+(' + num + r')\s+(' + num + r')\s+(' + num + r')(?:\s+(' + num + r'))?\s*$'
+    )
+    for linha in texto.splitlines():
+        l = linha.strip()
+        m = bico_pat.match(l)
+        if m:
+            bico_id = _nid(m.group(2))
+            enc_ini = _fl(m.group(4))
+            enc_fin = _fl(m.group(5))
+            if enc_ini is not None and enc_fin is not None and enc_fin >= enc_ini:
+                # Evita capturar linhas de bombas (modelo/série) por engano:
+                # só aceita se já vimos ENCERRANTE crescente (bico real)
+                ids_existentes = [b['id'] for b in bicos]
+                if bico_id not in ids_existentes:
+                    bicos.append({
+                        "id": bico_id,
+                        "encerrante_inicial": enc_ini,
+                        "encerrante_final":   enc_fin,
+                    })
+
+    # ── TANQUES: "001 GASOLINA COMUM 10.840,862 5.618,234 149.000,000 -31.095,102"
+    # Padrão real extraído: "001 10.840,862GASOLINA COMUM 5.618,234 149.000,000 -31.095,102"
+    # (PyPDF às vezes gruda o número com o texto seguinte sem espaço)
+    tanque_pat = re.compile(
+        r'^(\d{3})\s+(' + num + r')\s*([A-ZÀ-Ú][A-ZÀ-Ú0-9 ]*?)\s+(' + num + r')\s+(' + num + r')\s+(' + num + r')\s*$'
+    )
+    em_estoque = False
+    for linha in texto.splitlines():
+        l = linha.strip()
+        if re.search(r'Estoque\s*F[íi]sico', l, re.I):
+            em_estoque = True; continue
+        if re.search(r'^Resumo\s*DAC\s*-', l, re.I):
+            em_estoque = False; continue
+        if not em_estoque:
+            continue
+        m = tanque_pat.match(l)
+        if m:
+            tid     = _nid(m.group(1))
+            ini     = _fl(m.group(2))
+            produto = m.group(3).strip()
+            fin     = _fl(m.group(4))
+            ids_existentes = [t['id'] for t in tanques]
+            if tid not in ids_existentes:
+                tanques.append({
+                    "id": tid,
+                    "produto": produto,
+                    "estoque_inicial": ini,
+                    "estoque_final":   fin,
+                })
+
+    return {"competencia": competencia, "tanques": tanques, "bicos": bicos}
 
 
 # ── PARSER UNIVERSAL ──────────────────────────────────────────────────────────
