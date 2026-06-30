@@ -1,5 +1,5 @@
 import os
-import io
+import io, re, unicodedata
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -20,6 +20,15 @@ from openpyxl.utils import get_column_letter
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+
+def _nome_posto(info_atu):
+    """Sanitiza o nome da empresa para uso em nome de arquivo."""
+    razao = info_atu.get("info", {}).get("razao", "") or "RELATORIO_LMC"
+    razao = unicodedata.normalize("NFKD", razao)
+    razao = "".join(c for c in razao if not unicodedata.combining(c))
+    razao = re.sub(r"[^A-Za-z0-9 ]", "", razao).strip()
+    razao = re.sub(r"\s+", "_", razao)
+    return razao[:40] or "RELATORIO_LMC"
 # SECRET_KEY fixa garante que sessões funcionem com múltiplos workers
 app.secret_key = os.environ.get("SECRET_KEY", "LMC-SPED-2026-K9x#mQpZ")
 app.permanent_session_lifetime = timedelta(hours=8)
@@ -158,7 +167,7 @@ def processar():
         buf = io.BytesIO()
         wb.save(buf); buf.seek(0)
 
-        nome = f"Relatorio_LMC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        nome = f"Relatorio_LMC_{_nome_posto(d_atu)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         return send_file(buf,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             as_attachment=True, download_name=nome)
