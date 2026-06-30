@@ -153,94 +153,54 @@ def processar():
         return redirect(url_for("index"))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LÓGICA LMC
-# ─────────────────────────────────────────────────────────────────────────────
-C_AZUL_ESC="1F3864"; C_AZUL_MED="2E75B6"
-C_VERDE_BG="C6EFCE"; C_VERDE_FG="375623"
-C_VERM_BG ="FFC7CE"; C_VERM_FG ="9C0006"
-C_AMAR_BG ="FFEB9C"; C_AMAR_FG ="7D6608"
-C_CINZA   ="D9D9D9"
-NF="&#35;,##0.000".replace("&#35;","#")
-VERSAO_OBRIGATORIA="020"
+# ─────────────────────────────────────────────────────────────────────────────from datetime import datetime
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
-def _brd():
-    s=Side(style="thin",color="BFBFBF")
-    return Border(left=s,right=s,top=s,bottom=s)
-
-def _fl(v):
-    return float(v.strip().replace(",",".")) if v.strip() else 0.0
-
-def _dt(s):
-    s=s.strip()
-    return datetime.strptime(s,"%d%m%Y").date() if len(s)==8 else None
-
-def _st(dif):
-    if dif is None: return "⚠️ AUSENTE"
-    return "✅ OK" if dif==0 else "❌ DIVERGÊNCIA"
-
-def _row_bg(st):
-    return {"✅ OK":C_VERDE_BG,"❌ DIVERGÊNCIA":C_VERM_BG,"⚠️ AUSENTE":C_AMAR_BG}.get(st)
+C_AZUL_ESC = "1F3864"; C_AZUL_MED = "2E75B6"
+C_VERDE_BG = "C6EFCE"; C_VERDE_FG = "375623"
+C_VERM_BG  = "FFC7CE"; C_VERM_FG  = "9C0006"
+C_AMAR_BG  = "FFEB9C"; C_AMAR_FG  = "7D6608"
+C_CINZA    = "D9D9D9"
+NF = "#,##0.000"
+VERSAO_OBRIGATORIA = "020"
 
 def _sk(x):
     return int(x) if str(x).isdigit() else x
 
 def _nid(raw):
-    """Normaliza ID do tanque/bico: '005' → '5', '10' → '10'"""
     try:
         return str(int(raw.strip()))
     except:
         return raw.strip()
 
-def _cel(ws,r,c,val,bg=None,fg="000000",bold=False,sz=10,align="center",wrap=False,fmt=None):
-    cel=ws.cell(row=r,column=c,value=val)
-    cel.font=Font(name="Arial",size=sz,bold=bold,color=fg)
-    cel.alignment=Alignment(horizontal=align,vertical="center",wrap_text=wrap)
-    cel.border=_brd()
-    if bg:  cel.fill=PatternFill("solid",start_color=bg)
-    if fmt: cel.number_format=fmt
-    return cel
+def _brd():
+    s = Side(style="thin", color="BFBFBF")
+    return Border(left=s, right=s, top=s, bottom=s)
 
-def _ch(ws,r,c,val,bg=C_AZUL_ESC,fg="FFFFFF",sz=10):
-    cel=ws.cell(row=r,column=c,value=val)
-    cel.font=Font(name="Arial",bold=True,color=fg,size=sz)
-    cel.fill=PatternFill("solid",start_color=bg)
-    cel.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
-    cel.border=_brd(); return cel
+def _fl(v):
+    return float(v.strip().replace(",", ".")) if v.strip() else 0.0
 
-def _dc(ws,r,c,val,fmt=None,bg=None):
-    return _cel(ws,r,c,val,bg=bg,fmt=fmt)
+def _dt(s):
+    s = s.strip()
+    return datetime.strptime(s, "%d%m%Y").date() if len(s) == 8 else None
 
-def _sc(ws,r,c,status):
-    m={"✅ OK":(C_VERDE_BG,C_VERDE_FG),"❌ DIVERGÊNCIA":(C_VERM_BG,C_VERM_FG),
-       "⚠️ AUSENTE":(C_AMAR_BG,C_AMAR_FG),"❌ AUSENTE":(C_VERM_BG,C_VERM_FG),
-       "⚠️ INCONSISTENTE":(C_AMAR_BG,C_AMAR_FG),"❌ INVÁLIDA":(C_VERM_BG,C_VERM_FG)}
-    bg,fg=m.get(status,(C_CINZA,"000000"))
-    cel=ws.cell(row=r,column=c,value=status)
-    cel.font=Font(name="Arial",bold=True,size=10,color=fg)
-    cel.fill=PatternFill("solid",start_color=bg)
-    cel.alignment=Alignment(horizontal="center",vertical="center")
-    cel.border=_brd(); return cel
+def _st(dif):
+    if dif is None: return "⚠️ AUSENTE"
+    return "✅ OK" if dif == 0 else "❌ DIVERGÊNCIA"
 
-def _titulo(ws,r,texto,n,sz=12):
-    ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=n)
-    c=ws.cell(row=r,column=1,value=texto)
-    c.font=Font(name="Arial",bold=True,size=sz,color="FFFFFF")
-    c.fill=PatternFill("solid",start_color=C_AZUL_ESC)
-    c.alignment=Alignment(horizontal="center",vertical="center")
-    ws.row_dimensions[r].height=26; return c
+def _row_bg(status):
+    return {"✅ OK": C_VERDE_BG, "❌ DIVERGÊNCIA": C_VERM_BG, "⚠️ AUSENTE": C_AMAR_BG}.get(status)
 
-def _subtit(ws,r,texto,n):
-    ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=n)
-    c=ws.cell(row=r,column=1,value=texto)
-    c.font=Font(name="Arial",bold=True,size=10,color="FFFFFF")
-    c.fill=PatternFill("solid",start_color=C_AZUL_MED)
-    c.alignment=Alignment(horizontal="center",vertical="center")
-    ws.row_dimensions[r].height=20; return c
+def _label(mapa, id_raw, tipo):
+    """Retorna 'Tanque 1', 'Bico 3' etc. usando o mapa ordinal."""
+    return f"{tipo} {mapa.get(id_raw, id_raw)}"
 
-# ── Leitura ───────────────────────────────────────────────────────────────────
-def ler_sped_bytes(data):
-    text=data.decode("latin-1",errors="replace")
+# ── LEITURA ────────────────────────────────────────────────────────────────────
+def ler_sped(caminho):
+    with open(caminho, encoding="latin-1", errors="replace") as f:
+        text = f.read()
     tanques={}; bicos={}; info={}
     data_atual=None; vals_1300={}
 
@@ -270,15 +230,38 @@ def ler_sped_bytes(data):
         elif tp=="1310":
             if not vals_1300: continue
             t=_nid(c[2])
-            cap=_fl(c[11]) if len(c)>11 and c[11].strip() else None
-            key=(t,vals_1300["data"])
-            tanques[key]={
-                "tanque":t,"data":vals_1300["data"],
-                "est_abert":vals_1300["est_abert"],"entrada":vals_1300["entrada"],
-                "saida":vals_1300["saida"],"evap":vals_1300["evap"],
-                "ajuste":vals_1300["ajuste"],"est_fech":vals_1300["est_fech"],
-                "capacidade":cap,
-            }
+            tem_campos_proprios = len(c) > 10 and c[3].strip() != ""
+            if tem_campos_proprios:
+                try:
+                    est_abert_1310 = _fl(c[3])
+                    entrada_1310   = _fl(c[4]) if len(c)>4 else 0.0
+                    saida_1310     = _fl(c[6]) if len(c)>6 else 0.0
+                    evap_1310      = _fl(c[8]) if len(c)>8 else 0.0
+                    ajuste_1310    = _fl(c[9]) if len(c)>9 else 0.0
+                    est_fech_1310  = _fl(c[10]) if len(c)>10 else 0.0
+                    cap            = _fl(c[11]) if len(c)>11 and c[11].strip() else None
+                except Exception:
+                    tem_campos_proprios = False
+
+            if tem_campos_proprios:
+                key=(t,vals_1300["data"])
+                tanques[key]={
+                    "tanque":t,"data":vals_1300["data"],
+                    "est_abert":est_abert_1310,"entrada":entrada_1310,
+                    "saida":saida_1310,"evap":evap_1310,
+                    "ajuste":ajuste_1310,"est_fech":est_fech_1310,
+                    "capacidade":cap,
+                }
+            else:
+                cap=_fl(c[11]) if len(c)>11 and c[11].strip() else None
+                key=(t,vals_1300["data"])
+                tanques[key]={
+                    "tanque":t,"data":vals_1300["data"],
+                    "est_abert":vals_1300["est_abert"],"entrada":vals_1300["entrada"],
+                    "saida":vals_1300["saida"],"evap":vals_1300["evap"],
+                    "ajuste":vals_1300["ajuste"],"est_fech":vals_1300["est_fech"],
+                    "capacidade":cap,
+                }
 
         elif tp=="1320":
             b=_nid(c[2])
@@ -291,42 +274,41 @@ def ler_sped_bytes(data):
 
     return {"info":info,"tanques":tanques,"bicos":bicos}
 
-def confronto_mensal(d_ant,d_atu):
-    res={"tanques":[],"bicos":[]}
-    dt_ant=sorted(set(d for (_,d) in d_ant["tanques"]))
-    dt_atu=sorted(set(d for (_,d) in d_atu["tanques"]))
+
+def confronto_mensal(d_ant, d_atu):
+    res = {"tanques": [], "bicos": []}
+    dt_ant = sorted(set(d for (_,d) in d_ant["tanques"]))
+    dt_atu = sorted(set(d for (_,d) in d_atu["tanques"]))
     if not dt_ant or not dt_atu: return res
     ult=dt_ant[-1]; pri=dt_atu[0]
-    ult_atu=dt_atu[-1]
 
-    # Mapear primeiro e último dia disponível de cada tanque no mês atual
     tanq_pri={}; tanq_ult={}
     for (t,d) in d_atu["tanques"]:
         if t not in tanq_pri or d<tanq_pri[t]: tanq_pri[t]=d
         if t not in tanq_ult or d>tanq_ult[t]: tanq_ult[t]=d
 
     for t in sorted(set([t for (t,d) in d_ant["tanques"] if d==ult]+
-                        list(tanq_pri.keys())),key=_sk):
-        fa  =d_ant["tanques"].get((t,ult),{})
-        fech=fa.get("est_fech")
+                        list(tanq_pri.keys())), key=_sk):
+        fa   = d_ant["tanques"].get((t,ult),{})
+        fech = fa.get("est_fech")
         pri_t=tanq_pri.get(t); ult_t=tanq_ult.get(t)
-        aa  =d_atu["tanques"].get((t,pri_t),{}) if pri_t else {}
-        fu  =d_atu["tanques"].get((t,ult_t),{}) if ult_t else {}
-        aber    =aa.get("est_abert")
-        fech_atu=fu.get("est_fech")
-        dif=round(aber-fech,3) if fech is not None and aber is not None else None
+        aa   = d_atu["tanques"].get((t,pri_t),{}) if pri_t else {}
+        fu   = d_atu["tanques"].get((t,ult_t),{}) if ult_t else {}
+        aber     = aa.get("est_abert")
+        fech_atu = fu.get("est_fech")
+        dif = round(aber-fech,3) if fech is not None and aber is not None else None
 
-        # ── Cálculo ANP (sobra/falta mês atual) ──────────────────────────────
-        dias_t=sorted(d for (tt,d) in d_atu["tanques"] if tt==t)
-        est_ini   =d_atu["tanques"][(t,dias_t[0])]["est_abert"]  if dias_t else None
-        est_fin_sp=d_atu["tanques"][(t,dias_t[-1])]["est_fech"]  if dias_t else None
-        total_rec =round(sum(d_atu["tanques"][(t,d)]["entrada"] for d in dias_t),3)
-        total_sai =round(sum(d_atu["tanques"][(t,d)]["saida"]   for d in dias_t),3)
+        # Cálculo ANP
+        dias_t = sorted(d for (tt,d) in d_atu["tanques"] if tt==t)
+        est_ini    = d_atu["tanques"][(t,dias_t[0])]["est_abert"]  if dias_t else None
+        est_fin_sp = d_atu["tanques"][(t,dias_t[-1])]["est_fech"]  if dias_t else None
+        total_rec  = round(sum(d_atu["tanques"][(t,d)]["entrada"] for d in dias_t),3)
+        total_sai  = round(sum(d_atu["tanques"][(t,d)]["saida"]   for d in dias_t),3)
         if est_ini is not None and est_fin_sp is not None:
-            saldo_calc=round(est_ini+total_rec-total_sai,3)
-            diferenca_anp=round(saldo_calc-est_fin_sp,3)
-            limite_anp=round(total_rec*0.006,3)
-            pct_anp=round(abs(diferenca_anp)/total_rec*100,4) if total_rec>0 else 0
+            saldo_calc    = round(est_ini+total_rec-total_sai,3)
+            diferenca_anp = round(saldo_calc-est_fin_sp,3)
+            limite_anp    = round(total_rec*0.006,3)
+            pct_anp       = round(abs(diferenca_anp)/total_rec*100,4) if total_rec>0 else 0
             if abs(diferenca_anp)<=limite_anp:
                 status_anp="✅ DENTRO DO LIMITE"
             elif diferenca_anp>0:
@@ -334,19 +316,16 @@ def confronto_mensal(d_ant,d_atu):
             else:
                 status_anp="❌ FALTA ACIMA 0,6%"
         else:
-            saldo_calc=diferenca_anp=limite_anp=pct_anp=None
-            status_anp="⚠️ AUSENTE"
+            diferenca_anp=limite_anp=pct_anp=None; status_anp="⚠️ AUSENTE"
 
         res["tanques"].append({
             "id":t,"dt_fech":ult,"fech":fech,"dt_aber":pri_t,"aber":aber,
             "dif":dif,"status":_st(dif),"dt_fech_atu":ult_t,"fech_atu":fech_atu,
-            # ANP
             "total_rec":total_rec,"total_sai":total_sai,
             "diferenca_anp":diferenca_anp,"limite_anp":limite_anp,
             "pct_anp":pct_anp,"status_anp":status_anp,
         })
 
-    # Mapear primeiro e último dia disponível de cada bico no mês atual
     bico_pri={}; bico_ult={}
     for (b,d) in d_atu["bicos"]:
         if b not in bico_pri or d<bico_pri[b]: bico_pri[b]=d
@@ -356,15 +335,15 @@ def confronto_mensal(d_ant,d_atu):
     ult_b=db_ant[-1] if db_ant else ult
 
     for b in sorted(set([b for (b,d) in d_ant["bicos"] if d==ult_b]+
-                        list(bico_pri.keys())),key=_sk):
-        fa  =d_ant["bicos"].get((b,ult_b),{})
-        fech=fa.get("enc_fech")
+                        list(bico_pri.keys())), key=_sk):
+        fa  = d_ant["bicos"].get((b,ult_b),{})
+        fech= fa.get("enc_fech")
         pri_b=bico_pri.get(b); ult_b2=bico_ult.get(b)
-        aa  =d_atu["bicos"].get((b,pri_b),{}) if pri_b else {}
-        fu  =d_atu["bicos"].get((b,ult_b2),{}) if ult_b2 else {}
-        aber    =aa.get("enc_abert")
-        fech_atu=fu.get("enc_fech")
-        dif=round(aber-fech,3) if fech is not None and aber is not None else None
+        aa  = d_atu["bicos"].get((b,pri_b),{}) if pri_b else {}
+        fu  = d_atu["bicos"].get((b,ult_b2),{}) if ult_b2 else {}
+        aber    = aa.get("enc_abert")
+        fech_atu= fu.get("enc_fech")
+        dif = round(aber-fech,3) if fech is not None and aber is not None else None
         res["bicos"].append({
             "id":b,"dt_fech":ult_b,"fech":fech,"dt_aber":pri_b,"aber":aber,
             "dif":dif,"status":_st(dif),"dt_fech_atu":ult_b2,"fech_atu":fech_atu,
@@ -372,29 +351,441 @@ def confronto_mensal(d_ant,d_atu):
     return res
 
 def confronto_diario(dados):
-    res_t=[]; res_b=[]
-    for t in sorted(set(t for (t,_) in dados["tanques"]),key=_sk):
-        dias=sorted(d for (tt,d) in dados["tanques"] if tt==t)
+    res_t = []; res_b = []
+    for tanque in sorted(set(t for (t,_) in dados["tanques"]), key=lambda x: int(x) if x.isdigit() else x):
+        dias = sorted(d for (t,d) in dados["tanques"] if t==tanque)
         for i in range(len(dias)-1):
-            d1,d2=dias[i],dias[i+1]
-            r1=dados["tanques"][(t,d1)]; r2=dados["tanques"][(t,d2)]
+            d1,d2 = dias[i],dias[i+1]
+            r1=dados["tanques"][(tanque,d1)]; r2=dados["tanques"][(tanque,d2)]
             fech=r1["est_fech"]; aber=r2["est_abert"]; dif=round(aber-fech,3)
-            res_t.append({"tanque":t,"dia_fech":d1,"fech":fech,"dia_aber":d2,
-                          "aber":aber,"dif":dif,"status":_st(dif),})
-    for b in sorted(set(b for (b,_) in dados["bicos"]),key=_sk):
-        dias=sorted(d for (bb,d) in dados["bicos"] if bb==b)
+            res_t.append({"tanque":tanque,"dia_fech":d1,"fech":fech,"dia_aber":d2,"aber":aber,"dif":dif,"status":_st(dif),})
+    for bico in sorted(set(b for (b,_) in dados["bicos"]), key=lambda x: int(x) if x.isdigit() else x):
+        dias = sorted(d for (b,d) in dados["bicos"] if b==bico)
         for i in range(len(dias)-1):
-            d1,d2=dias[i],dias[i+1]
-            r1=dados["bicos"][(b,d1)]; r2=dados["bicos"][(b,d2)]
+            d1,d2 = dias[i],dias[i+1]
+            r1=dados["bicos"][(bico,d1)]; r2=dados["bicos"][(bico,d2)]
             fech=r1["enc_fech"]; aber=r2["enc_abert"]; dif=round(aber-fech,3)
-            res_b.append({"bico":b,"dia_fech":d1,"fech":fech,"dia_aber":d2,
-                          "aber":aber,"dif":dif,"status":_st(dif),})
-    return {"tanques":res_t,"bicos":res_b}
+            res_b.append({"bico":bico,"dia_fech":d1,"fech":fech,"dia_aber":d2,"aber":aber,"dif":dif,"status":_st(dif),})
+    return {"tanques": res_t, "bicos": res_b}
 
-# ── Negativos ─────────────────────────────────────────────────────────────────
-C1300={5:"Est. Abertura",6:"Entrada",7:"Est. Aber. Pós Entrada",8:"Saída",
-       9:"Est. Fech. Pré Ajuste",10:"Evaporação",11:"Ajuste",12:"Est. Fechamento Final"}
-C1320={8:"Enc. Fechamento",9:"Enc. Abertura",10:"Volume Vendido",11:"Diferença Encerrante"}
+# ── NEGATIVOS ──────────────────────────────────────────────────────────────────
+CAMPOS_1300 = {5:"Est. Abertura",6:"Entrada",7:"Est. Aber. Pós Entrada",8:"Saída",
+               9:"Est. Fech. Pré Ajuste",10:"Evaporação",11:"Ajuste",12:"Est. Fechamento Final"}
+CAMPOS_1320 = {8:"Enc. Fechamento",9:"Enc. Abertura",10:"Volume Vendido",11:"Diferença Encerrante"}
+
+def verificar_negativos(caminho):
+    neg_t=[]; neg_b=[]; data_atual=None
+    with open(caminho, encoding="latin-1", errors="replace") as f:
+        for n, linha in enumerate(f, 1):
+            c = linha.strip().split("|")
+            if len(c)<2: continue
+            tp=c[1]
+            if tp=="1300":
+                data_atual=_dt(c[3]) if len(c)>3 else None
+                tanque=_nid(c[2])
+                for idx,nome in CAMPOS_1300.items():
+                    if idx>=len(c): continue
+                    try:
+                        v=_fl(c[idx])
+                        if v<0: neg_t.append({"tanque":tanque,"data":data_atual,"campo":nome,"valor":v,"linha":n})
+                    except: pass
+            elif tp=="1320":
+                bico=_nid(c[2])
+                for idx,nome in CAMPOS_1320.items():
+                    if idx>=len(c): continue
+                    try:
+                        v=_fl(c[idx])
+                        if v<0: neg_b.append({"bico":bico,"data":data_atual,"campo":nome,"valor":v,"linha":n})
+                    except: pass
+    return {"tanques": neg_t, "bicos": neg_b}
+
+# ── VERSÃO E CAPACIDADE ────────────────────────────────────────────────────────
+def verificar_versao_capacidade(dados):
+    info=dados["info"]; versao=info.get("versao",""); dt_ini=info.get("dt_ini","")
+    periodo=f"{dt_ini[2:4]}/{dt_ini[4:]}" if len(dt_ini)==8 else dt_ini
+    ano=int(dt_ini[4:]) if len(dt_ini)==8 else 0
+    cap_obrig = ano >= 2026
+    tanques_ids=sorted(set(t for (t,_) in dados["tanques"]), key=lambda x: int(x) if x.isdigit() else x)
+    cap_tanques=[]
+    for t in tanques_ids:
+        caps=set()
+        for d in sorted(d for (tt,d) in dados["tanques"] if tt==t):
+            c=dados["tanques"].get((t,d),{}).get("capacidade")
+            if c is not None: caps.add(c)
+        if not caps:
+            st="❌ AUSENTE" if cap_obrig else "⚠️ NÃO DECLARADA"; obs="Capacidade não informada"
+        elif len(caps)>1:
+            st="⚠️ INCONSISTENTE"; obs=f"Valores distintos: {sorted(caps)}"
+        elif list(caps)[0]<=0:
+            st="❌ INVÁLIDA"; obs=f"Valor zero/negativo: {list(caps)[0]}"
+        else:
+            st="✅ OK"; obs=f"{list(caps)[0]:,.0f} L"
+        cap_tanques.append({"tanque":t,"caps":sorted(caps),"status":st,"obs":obs})
+    return {"versao":versao,"versao_ok":versao==VERSAO_OBRIGATORIA,
+            "periodo":periodo,"cap_obrig":cap_obrig,"tanques":cap_tanques}
+
+# ── HELPERS EXCEL ──────────────────────────────────────────────────────────────
+def _brd_cel(ws,r,c,val,bg=None,fg="000000",bold=False,sz=10,align="center",wrap=False,fmt=None):
+    cel=ws.cell(row=r,column=c,value=val)
+    cel.font=Font(name="Arial",size=sz,bold=bold,color=fg)
+    cel.alignment=Alignment(horizontal=align,vertical="center",wrap_text=wrap)
+    cel.border=_brd()
+    if bg: cel.fill=PatternFill("solid",start_color=bg)
+    if fmt: cel.number_format=fmt
+    return cel
+
+def _ch(ws,r,c,val,bg=C_AZUL_ESC,fg="FFFFFF",sz=10):
+    cel=ws.cell(row=r,column=c,value=val)
+    cel.font=Font(name="Arial",bold=True,color=fg,size=sz)
+    cel.fill=PatternFill("solid",start_color=bg)
+    cel.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+    cel.border=_brd(); return cel
+
+def _dc(ws,r,c,val,fmt=None,bg=None):
+    return _brd_cel(ws,r,c,val,bg=bg,fmt=fmt)
+
+def _sc(ws,r,c,status):
+    mapa={"✅ OK":(C_VERDE_BG,C_VERDE_FG),"❌ DIVERGÊNCIA":(C_VERM_BG,C_VERM_FG),
+          "⚠️ AUSENTE":(C_AMAR_BG,C_AMAR_FG),"❌ AUSENTE":(C_VERM_BG,C_VERM_FG),
+          "⚠️ INCONSISTENTE":(C_AMAR_BG,C_AMAR_FG),"❌ INVÁLIDA":(C_VERM_BG,C_VERM_FG)}
+    bg,fg=mapa.get(status,(C_CINZA,"000000"))
+    cel=ws.cell(row=r,column=c,value=status)
+    cel.font=Font(name="Arial",bold=True,size=10,color=fg)
+    cel.fill=PatternFill("solid",start_color=bg)
+    cel.alignment=Alignment(horizontal="center",vertical="center")
+    cel.border=_brd(); return cel
+
+def _titulo(ws,r,texto,n,sz=12):
+    ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=n)
+    c=ws.cell(row=r,column=1,value=texto)
+    c.font=Font(name="Arial",bold=True,size=sz,color="FFFFFF")
+    c.fill=PatternFill("solid",start_color=C_AZUL_ESC)
+    c.alignment=Alignment(horizontal="center",vertical="center")
+    ws.row_dimensions[r].height=26; return c
+
+def _subtit(ws,r,texto,n):
+    ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=n)
+    c=ws.cell(row=r,column=1,value=texto)
+    c.font=Font(name="Arial",bold=True,size=10,color="FFFFFF")
+    c.fill=PatternFill("solid",start_color=C_AZUL_MED)
+    c.alignment=Alignment(horizontal="center",vertical="center")
+    ws.row_dimensions[r].height=20; return c
+
+# ── ABA RESUMO ─────────────────────────────────────────────────────────────────
+def aba_resumo(ws, conf_m, d_mai, info_ant, info_atu, neg_abr, neg_mai, vc_mai):
+    ws.sheet_view.showGridLines=False; N=7
+    _titulo(ws,1,"CONFERÊNCIA LMC – LIVRO DE MOVIMENTAÇÃO DE COMBUSTÍVEIS",N,sz=13)
+    ws.row_dimensions[1].height=30
+    ia=info_ant["info"]; iu=info_atu["info"]
+    for i,(a,e) in enumerate([(f"Empresa: {ia.get('razao','')}", f"CNPJ: {ia.get('cnpj','')}"),
+        (f"Competência anterior: {ia.get('dt_ini','')} a {ia.get('dt_fin','')}", f"Competência atual: {iu.get('dt_ini','')} a {iu.get('dt_fin','')}"),
+        (f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", "")], start=2):
+        ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
+        c1=ws.cell(row=i,column=1,value=a); c1.font=Font(name="Arial",bold=(i==2),size=10)
+        c1.alignment=Alignment(horizontal="left",vertical="center")
+        ws.merge_cells(start_row=i,start_column=5,end_row=i,end_column=N)
+        c2=ws.cell(row=i,column=5,value=e); c2.font=Font(name="Arial",size=10)
+        c2.alignment=Alignment(horizontal="right",vertical="center")
+        ws.row_dimensions[i].height=16
+
+    def bloco_ok(r, texto):
+        ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=N)
+        c=ws.cell(row=r,column=1,value=f"✅  {texto}")
+        c.font=Font(name="Arial",bold=True,size=10,color=C_VERDE_FG)
+        c.fill=PatternFill("solid",start_color=C_VERDE_BG)
+        c.alignment=Alignment(horizontal="left",vertical="center"); c.border=_brd()
+        ws.row_dimensions[r].height=18; return r+1
+
+    def bloco_err(r, texto):
+        ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=N)
+        c=ws.cell(row=r,column=1,value=f"❌  {texto}")
+        c.font=Font(name="Arial",bold=True,size=10,color=C_VERM_FG)
+        c.fill=PatternFill("solid",start_color=C_VERM_BG)
+        c.alignment=Alignment(horizontal="left",vertical="center"); c.border=_brd()
+        ws.row_dimensions[r].height=18; return r+1
+
+    def detalhe(r, texto, cor_bg=C_VERM_BG, cor_fg=C_VERM_FG):
+        ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=N)
+        c=ws.cell(row=r,column=1,value=f"     ▸  {texto}")
+        c.font=Font(name="Arial",size=10,color=cor_fg)
+        c.fill=PatternFill("solid",start_color=cor_bg)
+        c.alignment=Alignment(horizontal="left",vertical="center"); c.border=_brd()
+        ws.row_dimensions[r].height=16; return r+1
+
+    row=6
+
+    # 1. CONFRONTO MENSAL
+    _subtit(ws,row,"1.  CONFRONTO ENTRE MESES  –  Fechamento Anterior × Abertura Atual",N); row+=1
+    for i,h in enumerate(["Tipo","ID","Data Fech.","Valor Fech.","Data Aber.","Valor Aber.","Status"],1):
+        _ch(ws,row,i,h,bg=C_CINZA,fg=C_AZUL_ESC)
+    ws.row_dimensions[row].height=22; row+=1
+    for tipo, lista in [("Tanque", conf_m["tanques"]), ("Bico", conf_m["bicos"])]:
+        for x in lista:
+            bg=_row_bg(x["status"])
+            _dc(ws,row,1,tipo,bg=bg)
+            _dc(ws,row,2,f"{tipo} {x['id']}",bg=bg)
+            _dc(ws,row,3,x["dt_fech"].strftime("%d/%m/%Y") if x.get("dt_fech") else "",bg=bg)
+            _dc(ws,row,4,x["fech"],NF,bg=bg)
+            _dc(ws,row,5,x["dt_aber"].strftime("%d/%m/%Y") if x.get("dt_aber") else "",bg=bg)
+            _dc(ws,row,6,x["aber"],NF,bg=bg); _sc(ws,row,7,x["status"])
+            ws.row_dimensions[row].height=15; row+=1
+    row+=1
+
+    # 2. CONSISTÊNCIA DIÁRIA
+    _subtit(ws,row,"2.  CONSISTÊNCIA DIÁRIA – COMPETÊNCIA ATUAL  (Fechamento dia N = Abertura dia N+1)",N); row+=1
+    divs_t=[x for x in d_mai["tanques"] if x["status"]=="❌ DIVERGÊNCIA"]
+    divs_b=[x for x in d_mai["bicos"]   if x["status"]=="❌ DIVERGÊNCIA"]
+
+    if not divs_t:
+        row=bloco_ok(row, f"Tanques: {len(d_mai['tanques'])} transições verificadas — nenhuma divergência encontrada")
+    else:
+        row=bloco_err(row, f"Tanques: {len(divs_t)} divergência(s) de {len(d_mai['tanques'])} transições")
+        for x in divs_t:
+            row=detalhe(row, f"Tanque {x['tanque']}  |  Fech. {x['dia_fech'].strftime('%d/%m/%Y')}: {x['fech']:,.3f}  →  Aber. {x['dia_aber'].strftime('%d/%m/%Y')}: {x['aber']:,.3f}  |  Dif.: {x['dif']:,.3f} L")
+
+    if not divs_b:
+        row=bloco_ok(row, f"Bicos: {len(d_mai['bicos'])} transições verificadas — nenhuma divergência encontrada")
+    else:
+        row=bloco_err(row, f"Bicos: {len(divs_b)} divergência(s) de {len(d_mai['bicos'])} transições")
+        for x in divs_b:
+            row=detalhe(row, f"Bico {x['bico']}  |  Fech. {x['dia_fech'].strftime('%d/%m/%Y')}: {x['fech']:,.3f}  →  Aber. {x['dia_aber'].strftime('%d/%m/%Y')}: {x['aber']:,.3f}  |  Dif.: {x['dif']:,.3f}")
+    row+=1
+
+    # 3. VALORES NEGATIVOS
+    _subtit(ws,row,"3.  VALORES NEGATIVOS NOS REGISTROS 1310 / 1320  (Ambas as competências)",N); row+=1
+    todos_neg_t = neg_abr["tanques"] + neg_mai["tanques"]
+    todos_neg_b = neg_abr["bicos"]   + neg_mai["bicos"]
+
+    if not todos_neg_t:
+        row=bloco_ok(row, "Tanques (Reg. 1310): nenhum valor negativo detectado")
+    else:
+        row=bloco_err(row, f"Tanques: {len(todos_neg_t)} valor(es) negativo(s) encontrado(s)")
+        for x in todos_neg_t:
+            row=detalhe(row, f"Tanque {x['tanque']}  |  Data: {x['data'].strftime('%d/%m/%Y') if x.get('data') else 'N/D'}  |  Campo: {x['campo']}  |  Valor: {x['valor']:,.3f}  |  Linha SPED: {x['linha']}")
+            diag=DIAGNOSTICO_CAMPO.get(x['campo'],"Valor negativo inesperado neste campo")
+            row=detalhe(row, f"     ℹ️  {diag}", cor_bg="FCE4D6", cor_fg="7D4200")
+
+    if not todos_neg_b:
+        row=bloco_ok(row, "Bicos (Reg. 1320): nenhum valor negativo detectado")
+    else:
+        row=bloco_err(row, f"Bicos: {len(todos_neg_b)} valor(es) negativo(s) encontrado(s)")
+        for x in todos_neg_b:
+            row=detalhe(row, f"Bico {x['bico']}  |  Data: {x['data'].strftime('%d/%m/%Y') if x.get('data') else 'N/D'}  |  Campo: {x['campo']}  |  Valor: {x['valor']:,.3f}  |  Linha SPED: {x['linha']}")
+            diag=DIAGNOSTICO_CAMPO.get(x['campo'],"Valor negativo inesperado neste campo")
+            row=detalhe(row, f"     ℹ️  {diag}", cor_bg="FCE4D6", cor_fg="7D4200")
+    row+=1
+
+    # 4. VERSÃO E CAPACIDADE
+    _subtit(ws,row,f"4.  VERSÃO DO SPED E CAPACIDADE DOS TANQUES  –  {vc_mai['periodo']}",N); row+=1
+    versao_txt = (f"✅  Versão do SPED: {vc_mai['versao']} — correta (obrigatório: {VERSAO_OBRIGATORIA})"
+                  if vc_mai["versao_ok"]
+                  else f"❌  Versão do SPED: {vc_mai['versao']} — incorreta! Obrigatório: {VERSAO_OBRIGATORIA}. Pode causar rejeição no validador.")
+    ws.merge_cells(start_row=row,start_column=1,end_row=row,end_column=N)
+    c=ws.cell(row=row,column=1,value=versao_txt)
+    bg=C_VERDE_BG if vc_mai["versao_ok"] else C_VERM_BG
+    fg=C_VERDE_FG if vc_mai["versao_ok"] else C_VERM_FG
+    c.font=Font(name="Arial",bold=True,size=10,color=fg)
+    c.fill=PatternFill("solid",start_color=bg)
+    c.alignment=Alignment(horizontal="left",vertical="center"); c.border=_brd()
+    ws.row_dimensions[row].height=18; row+=1
+
+    n_cap_ok  = sum(1 for t in vc_mai["tanques"] if t["status"]=="✅ OK")
+    n_cap_err = sum(1 for t in vc_mai["tanques"] if t["status"]!="✅ OK")
+    if n_cap_err==0:
+        row=bloco_ok(row, f"Capacidade dos tanques: todos os {n_cap_ok} tanques declarados corretamente  |  "
+                     + "  ".join(f"Tanque {t['tanque']}: {t['obs']}" for t in vc_mai["tanques"]))
+    else:
+        row=bloco_err(row, f"Capacidade: {n_cap_err} tanque(s) com problema")
+        for t in vc_mai["tanques"]:
+            bg2=_row_bg(t["status"]) or C_AMAR_BG
+            fg2=C_VERM_FG if "❌" in t["status"] else C_AMAR_FG
+            row=detalhe(row, f"Tanque {t['tanque']}  |  {t['status']}  |  {t['obs']}", cor_bg=bg2, cor_fg=fg2)
+
+    ws.column_dimensions["A"].width=90
+    for i in range(2,N+1):
+        ws.column_dimensions[get_column_letter(i)].width=0.1
+
+# ── ABA CONFRONTO MENSAL ───────────────────────────────────────────────────────
+def aba_mensal(ws, conf_m, info_ant, info_atu):
+    ws.sheet_view.showGridLines = False
+    r = 1
+
+    def fmt_comp(dt):
+        meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        try:
+            mes = int(dt[2:4]); ano = dt[4:]
+            return f"{meses[mes-1]}/{ano}"
+        except:
+            return dt
+
+    comp_ant = fmt_comp(info_ant["info"].get("dt_fin", ""))
+    comp_atu = fmt_comp(info_atu["info"].get("dt_fin", ""))
+
+    for secao, lista, tipo, lbl_fech_ant, lbl_aber_atu, lbl_fech_atu in [
+        ("TANQUES – Confronto Competência Anterior × Atual (Reg. 1310)",
+         conf_m["tanques"], "Tanque",
+         f"Est. Fechamento\n{comp_ant} (L)",
+         f"Est. Abertura\n{comp_atu} (L)",
+         f"Est. Fechamento\n{comp_atu} (L)"),
+        ("BICOS – Confronto Competência Anterior × Atual (Reg. 1320)",
+         conf_m["bicos"], "Bico",
+         f"Enc. Fechamento\n{comp_ant}",
+         f"Enc. Abertura\n{comp_atu}",
+         f"Enc. Fechamento\n{comp_atu}"),
+    ]:
+        _titulo(ws, r, secao, 6); r += 1
+        for i, h in enumerate([tipo, lbl_fech_ant, lbl_aber_atu, "Diferença", "Status", lbl_fech_atu], 1):
+            _ch(ws, r, i, h)
+        ws.row_dimensions[r].height = 34; r += 1
+
+        for x in lista:
+            bg = _row_bg(x["status"])
+            _dc(ws, r, 1, f"{tipo} {x['id']}", bg=bg)
+            _dc(ws, r, 2, x["fech"],     NF, bg=bg)
+            _dc(ws, r, 3, x["aber"],     NF, bg=bg)
+            _dc(ws, r, 4, x["dif"],      NF, bg=bg)
+            _sc(ws, r, 5, x["status"])
+            _dc(ws, r, 6, x.get("fech_atu"), NF, bg=bg)
+            ws.row_dimensions[r].height = 15; r += 1
+        r += 2
+
+    for i, w in enumerate([14, 22, 22, 16, 22, 22], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+def aba_diario(ws, d_mai):
+    ws.sheet_view.showGridLines=False; r=1
+    for secao,lista,id_f,cols in [
+        ("TANQUES – Comparativo Diário Competência Atual (Reg. 1310)",
+         d_mai["tanques"],"tanque",
+         ["Tanque","Data Fech.","Est. Fechamento (L)","Data Aber.","Est. Abertura (L)","Diferença (L)","Status"]),
+        ("BICOS – Comparativo Diário Competência Atual (Reg. 1320)",
+         d_mai["bicos"],"bico",
+         ["Bico","Data Fech.","Enc. Fechamento","Data Aber.","Enc. Abertura","Diferença","Status"]),
+    ]:
+        _titulo(ws,r,secao,8); r+=1
+        for i,h in enumerate(cols,1): _ch(ws,r,i,h)
+        ws.row_dimensions[r].height=30; r+=1
+        tipo=cols[0]  # "Tanque" ou "Bico"
+        for x in lista:
+            bg=_row_bg(x["status"])
+            _dc(ws,r,1,f"{tipo} {x[id_f]}",bg=bg)
+            _dc(ws,r,2,x["dia_fech"].strftime("%d/%m/%Y"),bg=bg)
+            _dc(ws,r,3,x["fech"],NF,bg=bg)
+            _dc(ws,r,4,x["dia_aber"].strftime("%d/%m/%Y"),bg=bg)
+            _dc(ws,r,5,x["aber"],NF,bg=bg)
+            _dc(ws,r,6,x["dif"],NF,bg=bg)
+            _sc(ws,r,7,x["status"])
+            ws.row_dimensions[r].height=15; r+=1
+        r+=2
+    for i,w in enumerate([14,14,22,14,22,16,22],1):
+        ws.column_dimensions[get_column_letter(i)].width=w
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN
+
+def ler_sped_bytes(data):
+    """Versão para receber bytes (upload web) ao invés de caminho de arquivo."""
+    text = data.decode("latin-1", errors="replace")
+    tanques={}; bicos={}; info={}
+    data_atual=None; vals_1300={}
+
+    for linha in text.splitlines():
+        c=linha.strip().split("|")
+        if len(c)<2: continue
+        tp=c[1]
+
+        if tp=="0000":
+            info={"versao":c[2].strip() if len(c)>2 else "",
+                  "razao": c[6].strip() if len(c)>6 else "",
+                  "cnpj":  c[7].strip() if len(c)>7 else "",
+                  "dt_ini":c[4].strip() if len(c)>4 else "",
+                  "dt_fin":c[5].strip() if len(c)>5 else ""}
+
+        elif tp=="1300":
+            data_atual=_dt(c[3]) if len(c)>3 else None
+            if not data_atual: continue
+            vals_1300={
+                "data":data_atual,
+                "est_abert":_fl(c[4]),"entrada":_fl(c[5]),"saida":_fl(c[7]),
+                "evap":_fl(c[9]) if len(c)>9 else 0.0,
+                "ajuste":_fl(c[10]) if len(c)>10 else 0.0,
+                "est_fech":_fl(c[11]) if len(c)>11 else 0.0,
+            }
+
+        elif tp=="1310":
+            if not vals_1300: continue
+            t=_nid(c[2])
+            tem_campos_proprios = len(c) > 10 and c[3].strip() != ""
+            if tem_campos_proprios:
+                try:
+                    est_abert_1310 = _fl(c[3])
+                    entrada_1310   = _fl(c[4]) if len(c)>4 else 0.0
+                    saida_1310     = _fl(c[6]) if len(c)>6 else 0.0
+                    evap_1310      = _fl(c[8]) if len(c)>8 else 0.0
+                    ajuste_1310    = _fl(c[9]) if len(c)>9 else 0.0
+                    est_fech_1310  = _fl(c[10]) if len(c)>10 else 0.0
+                    cap            = _fl(c[11]) if len(c)>11 and c[11].strip() else None
+                except Exception:
+                    tem_campos_proprios = False
+
+            if tem_campos_proprios:
+                key=(t,vals_1300["data"])
+                tanques[key]={
+                    "tanque":t,"data":vals_1300["data"],
+                    "est_abert":est_abert_1310,"entrada":entrada_1310,
+                    "saida":saida_1310,"evap":evap_1310,
+                    "ajuste":ajuste_1310,"est_fech":est_fech_1310,
+                    "capacidade":cap,
+                }
+            else:
+                cap=_fl(c[11]) if len(c)>11 and c[11].strip() else None
+                key=(t,vals_1300["data"])
+                tanques[key]={
+                    "tanque":t,"data":vals_1300["data"],
+                    "est_abert":vals_1300["est_abert"],"entrada":vals_1300["entrada"],
+                    "saida":vals_1300["saida"],"evap":vals_1300["evap"],
+                    "ajuste":vals_1300["ajuste"],"est_fech":vals_1300["est_fech"],
+                    "capacidade":cap,
+                }
+
+        elif tp=="1320":
+            b=_nid(c[2])
+            if not data_atual: continue
+            bicos[(b,data_atual)]={
+                "bico":b,"data":data_atual,
+                "enc_abert":_fl(c[9]) if len(c)>9 else 0.0,
+                "enc_fech": _fl(c[8]) if len(c)>8 else 0.0,
+            }
+
+    return {"info":info,"tanques":tanques,"bicos":bicos}
+
+
+def verificar_negativos_bytes(data):
+    """Versão para receber bytes ao invés de caminho de arquivo."""
+    text = data.decode("latin-1", errors="replace")
+    neg_t=[]; neg_b=[]; da=None
+    for n, linha in enumerate(text.splitlines(), 1):
+        c = linha.strip().split("|")
+        if len(c)<2: continue
+        tp=c[1]
+        if tp=="1300":
+            da=_dt(c[3]) if len(c)>3 else None
+            tanque=_nid(c[2])
+            for idx,nome in CAMPOS_1300.items():
+                if idx>=len(c): continue
+                try:
+                    v=_fl(c[idx])
+                    if v<0: neg_t.append({"tanque":tanque,"data":da,"campo":nome,"valor":v,"linha":n})
+                except: pass
+        elif tp=="1320":
+            bico=_nid(c[2])
+            for idx,nome in CAMPOS_1320.items():
+                if idx>=len(c): continue
+                try:
+                    v=_fl(c[idx])
+                    if v<0: neg_b.append({"bico":bico,"data":da,"campo":nome,"valor":v,"linha":n})
+                except: pass
+    return {"tanques": neg_t, "bicos": neg_b}
 
 # Diagnóstico por campo negativo
 DIAGNOSTICO_CAMPO = {
@@ -413,312 +804,6 @@ DIAGNOSTICO_CAMPO = {
 }
 
 
-def verificar_negativos_bytes(data):
-    text=data.decode("latin-1",errors="replace")
-    neg_t=[]; neg_b=[]; da=None
-    for n,linha in enumerate(text.splitlines(),1):
-        c=linha.strip().split("|")
-        if len(c)<2: continue
-        tp=c[1]
-        if tp=="1300":
-            da=_dt(c[3]) if len(c)>3 else None
-            t=_nid(c[2])
-            for idx,nome in C1300.items():
-                if idx>=len(c): continue
-                try:
-                    v=_fl(c[idx])
-                    if v<0: neg_t.append({"tanque":t,"data":da,"campo":nome,"valor":v,"linha":n})
-                except: pass
-        elif tp=="1320":
-            b=_nid(c[2])
-            for idx,nome in C1320.items():
-                if idx>=len(c): continue
-                try:
-                    v=_fl(c[idx])
-                    if v<0: neg_b.append({"bico":b,"data":da,"campo":nome,"valor":v,"linha":n})
-                except: pass
-    return {"tanques":neg_t,"bicos":neg_b}
-
-# ── Versão e Capacidade ───────────────────────────────────────────────────────
-def verificar_versao_capacidade(dados):
-    info=dados["info"]; versao=info.get("versao",""); dt_ini=info.get("dt_ini","")
-    periodo=f"{dt_ini[2:4]}/{dt_ini[4:]}" if len(dt_ini)==8 else dt_ini
-    ano=int(dt_ini[4:]) if len(dt_ini)==8 else 0
-    cap_obrig=ano>=2026
-    ids=sorted(set(t for (t,_) in dados["tanques"]),key=_sk)
-    cap=[]
-    for t in ids:
-        caps=set()
-        for d in sorted(d for (tt,d) in dados["tanques"] if tt==t):
-            cv=dados["tanques"].get((t,d),{}).get("capacidade")
-            if cv is not None: caps.add(cv)
-        if not caps:
-            st="❌ AUSENTE" if cap_obrig else "⚠️ NÃO DECLARADA"; obs="Capacidade não informada"
-        elif len(caps)>1:
-            st="⚠️ INCONSISTENTE"; obs=f"Valores distintos: {sorted(caps)}"
-        elif list(caps)[0]<=0:
-            st="❌ INVÁLIDA"; obs=f"Valor zero/negativo: {list(caps)[0]}"
-        else:
-            st="✅ OK"; obs=f"{list(caps)[0]:,.0f} L"
-        cap.append({"tanque":t,"caps":sorted(caps),"status":st,"obs":obs})
-    return {"versao":versao,"versao_ok":versao==VERSAO_OBRIGATORIA,
-            "periodo":periodo,"cap_obrig":cap_obrig,"tanques":cap}
-
-# ── Abas Excel ────────────────────────────────────────────────────────────────
-def aba_resumo(ws,conf_m,d_mai,info_ant,info_atu,neg_abr,neg_mai,vc_mai):
-    ws.sheet_view.showGridLines=False; N=7
-    _titulo(ws,1,"CONFERÊNCIA LMC – LIVRO DE MOVIMENTAÇÃO DE COMBUSTÍVEIS",N,sz=13)
-    ws.row_dimensions[1].height=30
-    ia=info_ant["info"]; iu=info_atu["info"]
-    for i,(a,e) in enumerate([
-        (f"Empresa: {ia.get('razao','')}", f"CNPJ: {ia.get('cnpj','')}"),
-        (f"Competência anterior: {ia.get('dt_ini','')} a {ia.get('dt_fin','')}", f"Competência atual: {iu.get('dt_ini','')} a {iu.get('dt_fin','')}"),
-        (f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ""),
-    ],start=2):
-        ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
-        c1=ws.cell(row=i,column=1,value=a); c1.font=Font(name="Arial",bold=(i==2),size=10)
-        c1.alignment=Alignment(horizontal="left",vertical="center")
-        ws.merge_cells(start_row=i,start_column=5,end_row=i,end_column=N)
-        c2=ws.cell(row=i,column=5,value=e); c2.font=Font(name="Arial",size=10)
-        c2.alignment=Alignment(horizontal="right",vertical="center")
-        ws.row_dimensions[i].height=16
-
-    def ok(r,t):
-        ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=N)
-        c=ws.cell(row=r,column=1,value=f"✅  {t}")
-        c.font=Font(name="Arial",bold=True,size=10,color=C_VERDE_FG)
-        c.fill=PatternFill("solid",start_color=C_VERDE_BG)
-        c.alignment=Alignment(horizontal="left",vertical="center"); c.border=_brd()
-        ws.row_dimensions[r].height=18; return r+1
-
-    def err(r,t):
-        ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=N)
-        c=ws.cell(row=r,column=1,value=f"❌  {t}")
-        c.font=Font(name="Arial",bold=True,size=10,color=C_VERM_FG)
-        c.fill=PatternFill("solid",start_color=C_VERM_BG)
-        c.alignment=Alignment(horizontal="left",vertical="center"); c.border=_brd()
-        ws.row_dimensions[r].height=18; return r+1
-
-    def det(r,t,cbg=C_VERM_BG,cfg=C_VERM_FG):
-        ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=N)
-        c=ws.cell(row=r,column=1,value=f"     ▸  {t}")
-        c.font=Font(name="Arial",size=10,color=cfg)
-        c.fill=PatternFill("solid",start_color=cbg)
-        c.alignment=Alignment(horizontal="left",vertical="center"); c.border=_brd()
-        ws.row_dimensions[r].height=16; return r+1
-
-    row=6
-    _subtit(ws,row,"1.  CONFRONTO ENTRE MESES  –  Fechamento Anterior × Abertura Atual",N); row+=1
-    for i,h in enumerate(["Tipo","ID","Data Fech.","Valor Fech.","Data Aber.","Valor Aber.","Status"],1):
-        _ch(ws,row,i,h,bg=C_CINZA,fg=C_AZUL_ESC)
-    ws.row_dimensions[row].height=22; row+=1
-    for tipo,lista in [("Tanque",conf_m["tanques"]),("Bico",conf_m["bicos"])]:
-        for x in lista:
-            bg=_row_bg(x["status"])
-            _dc(ws,row,1,tipo,bg=bg); _dc(ws,row,2,f"{tipo} {x['id']}",bg=bg)
-            _dc(ws,row,3,x["dt_fech"].strftime("%d/%m/%Y") if x.get("dt_fech") else "",bg=bg)
-            _dc(ws,row,4,x["fech"],NF,bg=bg)
-            _dc(ws,row,5,x["dt_aber"].strftime("%d/%m/%Y") if x.get("dt_aber") else "",bg=bg)
-            _dc(ws,row,6,x["aber"],NF,bg=bg); _sc(ws,row,7,x["status"])
-            ws.row_dimensions[row].height=15; row+=1
-    row+=1
-    _subtit(ws,row,"2.  CONSISTÊNCIA DIÁRIA – COMPETÊNCIA ATUAL",N); row+=1
-    divs_t=[x for x in d_mai["tanques"] if x["status"]=="❌ DIVERGÊNCIA"]
-    divs_b=[x for x in d_mai["bicos"]   if x["status"]=="❌ DIVERGÊNCIA"]
-    if not divs_t: row=ok(row,f"Tanques: {len(d_mai['tanques'])} transições — nenhuma divergência")
-    else:
-        row=err(row,f"Tanques: {len(divs_t)} divergência(s) de {len(d_mai['tanques'])} transições")
-        for x in divs_t:
-            row=det(row,f"Tanque {x['tanque']}  |  Fech. {x['dia_fech'].strftime('%d/%m/%Y')}: {x['fech']:,.3f}  →  Aber. {x['dia_aber'].strftime('%d/%m/%Y')}: {x['aber']:,.3f}  |  Dif.: {x['dif']:,.3f} L")
-    if not divs_b: row=ok(row,f"Bicos: {len(d_mai['bicos'])} transições — nenhuma divergência")
-    else:
-        row=err(row,f"Bicos: {len(divs_b)} divergência(s) de {len(d_mai['bicos'])} transições")
-        for x in divs_b:
-            row=det(row,f"Bico {x['bico']}  |  Fech. {x['dia_fech'].strftime('%d/%m/%Y')}: {x['fech']:,.3f}  →  Aber. {x['dia_aber'].strftime('%d/%m/%Y')}: {x['aber']:,.3f}  |  Dif.: {x['dif']:,.3f}")
-    row+=1
-    _subtit(ws,row,"3.  VALORES NEGATIVOS  (Ambas as competências)",N); row+=1
-    nt=neg_abr["tanques"]+neg_mai["tanques"]; nb=neg_abr["bicos"]+neg_mai["bicos"]
-    if not nt: row=ok(row,"Tanques: nenhum valor negativo detectado")
-    else:
-        row=err(row,f"Tanques: {len(nt)} valor(es) negativo(s)")
-        for x in nt:
-            row=det(row,f"Tanque {x['tanque']}  |  Data: {x['data'].strftime('%d/%m/%Y') if x.get('data') else 'N/D'}  |  Campo: {x['campo']}  |  Valor: {x['valor']:,.3f}  |  Linha: {x['linha']}")
-            diag=DIAGNOSTICO_CAMPO.get(x['campo'],"Valor negativo inesperado neste campo")
-            row=det(row,f"     ℹ️  {diag}",cbg="FCE4D6",cfg="7D4200")
-    if not nb: row=ok(row,"Bicos: nenhum valor negativo detectado")
-    else:
-        row=err(row,f"Bicos: {len(nb)} valor(es) negativo(s)")
-        for x in nb:
-            row=det(row,f"Bico {x['bico']}  |  Data: {x['data'].strftime('%d/%m/%Y') if x.get('data') else 'N/D'}  |  Campo: {x['campo']}  |  Valor: {x['valor']:,.3f}  |  Linha: {x['linha']}")
-            diag=DIAGNOSTICO_CAMPO.get(x['campo'],"Valor negativo inesperado neste campo")
-            row=det(row,f"     ℹ️  {diag}",cbg="FCE4D6",cfg="7D4200")
-    row+=1
-    _subtit(ws,row,f"4.  VERSÃO DO SPED E CAPACIDADE  –  {vc_mai['periodo']}",N); row+=1
-    vt=(f"✅  Versão {vc_mai['versao']} — correta (obrigatório: {VERSAO_OBRIGATORIA})" if vc_mai["versao_ok"]
-        else f"❌  Versão {vc_mai['versao']} — incorreta! Obrigatório: {VERSAO_OBRIGATORIA}")
-    ws.merge_cells(start_row=row,start_column=1,end_row=row,end_column=N)
-    c=ws.cell(row=row,column=1,value=vt)
-    bg=C_VERDE_BG if vc_mai["versao_ok"] else C_VERM_BG
-    fg=C_VERDE_FG if vc_mai["versao_ok"] else C_VERM_FG
-    c.font=Font(name="Arial",bold=True,size=10,color=fg)
-    c.fill=PatternFill("solid",start_color=bg)
-    c.alignment=Alignment(horizontal="left",vertical="center"); c.border=_brd()
-    ws.row_dimensions[row].height=18; row+=1
-    nok=sum(1 for t in vc_mai["tanques"] if t["status"]=="✅ OK")
-    ner=sum(1 for t in vc_mai["tanques"] if t["status"]!="✅ OK")
-    if ner==0:
-        row=ok(row,f"Capacidade: todos os {nok} tanques OK  |  "+"  ".join(f"Tanque {t['tanque']}: {t['obs']}" for t in vc_mai["tanques"]))
-    else:
-        row=err(row,f"Capacidade: {ner} tanque(s) com problema")
-        for t in vc_mai["tanques"]:
-            b2=_row_bg(t["status"]) or C_AMAR_BG
-            f2=C_VERM_FG if "❌" in t["status"] else C_AMAR_FG
-            row=det(row,f"Tanque {t['tanque']}  |  {t['status']}  |  {t['obs']}",cbg=b2,cfg=f2)
-    ws.column_dimensions["A"].width=90
-    for i in range(2,N+1): ws.column_dimensions[get_column_letter(i)].width=0.1
-
-def aba_mensal(ws, conf_m, info_ant, info_atu):
-    ws.sheet_view.showGridLines = False
-    r = 1
-
-    def fmt_comp(dt):
-        meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
-        try:
-            mes = int(dt[2:4]); ano = dt[4:]
-            return f"{meses[mes-1]}/{ano}"
-        except:
-            return dt
-
-    comp_ant = fmt_comp(info_ant["info"].get("dt_fin",""))
-    comp_atu = fmt_comp(info_atu["info"].get("dt_fin",""))
-
-    # ── TANQUES (com colunas ANP) ─────────────────────────────────────────────
-    _titulo(ws, r, "TANQUES – Confronto Competência Anterior × Atual (Reg. 1310)", 12); r += 1
-    hdrs_t = [
-        "Tanque",
-        f"Est. Fechamento\n{comp_ant} (L)",
-        f"Est. Abertura\n{comp_atu} (L)",
-        "Diferença",
-        "Status",
-        f"Est. Fechamento\n{comp_atu} (L)",
-        "Recebimento\nno Mês (L)",
-        "Sobra / Falta\nno Mês (L)",
-        f"Limite ANP\n0,6% Receb.",
-        "% da Variação\nsobre Receb.",
-        "Status ANP",
-        "Observação ANP",
-    ]
-    for i,h in enumerate(hdrs_t,1): _ch(ws,r,i,h)
-    ws.row_dimensions[r].height=36; r+=1
-
-    for x in conf_m["tanques"]:
-        bg=_row_bg(x["status"])
-        # status ANP define cor extra
-        bg_anp = C_VERDE_BG if x["status_anp"]=="✅ DENTRO DO LIMITE" else                  C_VERM_BG  if x["status_anp"]=="❌ FALTA ACIMA 0,6%" else                  C_AMAR_BG
-
-        _dc(ws,r,1, f"Tanque {x['id']}", bg=bg)
-        _dc(ws,r,2, x["fech"],     NF, bg=bg)
-        _dc(ws,r,3, x["aber"],     NF, bg=bg)
-        _dc(ws,r,4, x["dif"],      NF, bg=bg)
-        _sc(ws,r,5, x["status"])
-        _dc(ws,r,6, x.get("fech_atu"), NF, bg=bg)
-        _dc(ws,r,7, x.get("total_rec"), NF, bg=bg_anp)
-        _dc(ws,r,8, x.get("diferenca_anp"), NF, bg=bg_anp)
-        _dc(ws,r,9, x.get("limite_anp"),    NF, bg=bg_anp)
-        # % formatado
-        pct = x.get("pct_anp")
-        cel_pct = ws.cell(row=r, column=10,
-                          value=pct/100 if pct is not None else None)
-        cel_pct.number_format = "0.000%"
-        cel_pct.font=Font(name="Arial",size=10)
-        cel_pct.alignment=Alignment(horizontal="center",vertical="center")
-        cel_pct.border=_brd()
-        cel_pct.fill=PatternFill("solid",start_color=bg_anp)
-
-        _sc(ws,r,11, x["status_anp"])
-
-        # Observação textual
-        obs=""
-        d_anp=x.get("diferenca_anp")
-        rec=x.get("total_rec",0)
-        pct_v=x.get("pct_anp",0)
-        if d_anp is not None and abs(d_anp)>0.001:
-            if x["status_anp"]=="✅ DENTRO DO LIMITE":
-                obs=f"Variação de {abs(d_anp):,.3f} L dentro do limite permitido"
-            elif "SOBRA" in x["status_anp"]:
-                obs=(f"SOBRA de {d_anp:,.3f} L ({pct_v:.3f}% do recebimento). "
-                     f"Limite: {x.get('limite_anp',0):,.3f} L. "
-                     f"Excede em {d_anp-x.get('limite_anp',0):,.3f} L. "
-                     f"Notificar empresa — risco de penalidade ANP.")
-            else:
-                obs=(f"FALTA de {abs(d_anp):,.3f} L ({pct_v:.3f}% do recebimento). "
-                     f"Limite: {x.get('limite_anp',0):,.3f} L. "
-                     f"Excede em {abs(d_anp)-x.get('limite_anp',0):,.3f} L. "
-                     f"Notificar empresa — risco de penalidade ANP.")
-        cel_obs=ws.cell(row=r,column=12,value=obs)
-        cel_obs.font=Font(name="Arial",size=9,
-                          color=C_VERM_FG if "FALTA" in obs or "SOBRA" in obs else "375623")
-        cel_obs.alignment=Alignment(horizontal="left",vertical="center",wrap_text=True)
-        cel_obs.border=_brd()
-        cel_obs.fill=PatternFill("solid",start_color=bg_anp)
-        ws.row_dimensions[r].height=30; r+=1
-    r+=2
-
-    # ── BICOS (sem colunas ANP) ───────────────────────────────────────────────
-    _titulo(ws, r, "BICOS – Confronto Competência Anterior × Atual (Reg. 1320)", 6); r += 1
-    hdrs_b = [
-        "Bico",
-        f"Enc. Fechamento\n{comp_ant}",
-        f"Enc. Abertura\n{comp_atu}",
-        "Diferença",
-        "Status",
-        f"Enc. Fechamento\n{comp_atu}",
-    ]
-    for i,h in enumerate(hdrs_b,1): _ch(ws,r,i,h)
-    ws.row_dimensions[r].height=34; r+=1
-
-    for x in conf_m["bicos"]:
-        bg=_row_bg(x["status"])
-        _dc(ws,r,1,f"Bico {x['id']}",bg=bg)
-        _dc(ws,r,2,x["fech"],    NF,bg=bg)
-        _dc(ws,r,3,x["aber"],    NF,bg=bg)
-        _dc(ws,r,4,x["dif"],     NF,bg=bg)
-        _sc(ws,r,5,x["status"])
-        _dc(ws,r,6,x.get("fech_atu"),NF,bg=bg)
-        ws.row_dimensions[r].height=15; r+=1
-
-    # Larguras
-    for i,w in enumerate([14,20,20,16,22,20,20,20,18,18,22,55],1):
-        ws.column_dimensions[get_column_letter(i)].width=w
-
-
-def aba_diario(ws,d_mai):
-    ws.sheet_view.showGridLines=False; r=1
-    for secao,lista,idf,cols in [
-        ("TANQUES – Comparativo Diário Competência Atual (Reg. 1310)",d_mai["tanques"],"tanque",
-         ["Tanque","Data Fech.","Est. Fechamento (L)","Data Aber.","Est. Abertura (L)","Diferença (L)","Status"]),
-        ("BICOS – Comparativo Diário Competência Atual (Reg. 1320)",d_mai["bicos"],"bico",
-         ["Bico","Data Fech.","Enc. Fechamento","Data Aber.","Enc. Abertura","Diferença","Status"]),
-    ]:
-        _titulo(ws,r,secao,8); r+=1
-        for i,h in enumerate(cols,1): _ch(ws,r,i,h)
-        ws.row_dimensions[r].height=30; r+=1
-        tipo=cols[0]
-        for x in lista:
-            bg=_row_bg(x["status"])
-            _dc(ws,r,1,f"{tipo} {x[idf]}",bg=bg); _dc(ws,r,2,x["dia_fech"].strftime("%d/%m/%Y"),bg=bg)
-            _dc(ws,r,3,x["fech"],NF,bg=bg); _dc(ws,r,4,x["dia_aber"].strftime("%d/%m/%Y"),bg=bg)
-            _dc(ws,r,5,x["aber"],NF,bg=bg); _dc(ws,r,6,x["dif"],NF,bg=bg)
-            _sc(ws,r,7,x["status"])
-            ws.row_dimensions[r].height=15; r+=1
-        r+=2
-    for i,w in enumerate([14,14,22,14,22,16,14,22],1): ws.column_dimensions[get_column_letter(i)].width=w
-
-# ─────────────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    port=int(os.environ.get("PORT",5000))
-    app.run(host="0.0.0.0",port=port,debug=False)
-
 def aba_dac(ws, conf_dac, info_atu):
     """Aba de confronto DAC × SPED da competência atual."""
     ws.sheet_view.showGridLines = False
@@ -732,11 +817,9 @@ def aba_dac(ws, conf_dac, info_atu):
     comp_atu = fmt_comp(info_atu["info"].get("dt_fin",""))
     comp_dac = conf_dac.get("competencia", comp_atu)
 
-    # Título
     _titulo(ws, r, f"CONFRONTO DAC × SPED  –  Competência {comp_atu}", 8, sz=13)
     ws.row_dimensions[r].height = 30; r += 1
 
-    # Sub-info
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=8)
     c = ws.cell(row=r, column=1,
         value=f"DAC competência: {comp_dac}  |  SPED competência: {comp_atu}  |  "
@@ -749,8 +832,8 @@ def aba_dac(ws, conf_dac, info_atu):
     _subtit(ws, r, f"TANQUES (Reg. 1310)  –  Estoque Inicial e Final {comp_atu}", 8); r += 1
     for i, h in enumerate([
         "Tanque", "Produto",
-        f"Est. Inicial\nDAC (L)", f"Est. Inicial\nSPED (L)", "Dif. Inicial",
-        f"Est. Final\nDAC (L)",   f"Est. Final\nSPED (L)",   "Dif. Final",
+        "Est. Inicial\nDAC (L)", "Est. Inicial\nSPED (L)", "Dif. Inicial",
+        "Est. Final\nDAC (L)",   "Est. Final\nSPED (L)",   "Dif. Final",
     ], 1): _ch(ws, r, i, h, bg=C_CINZA, fg=C_AZUL_ESC)
     ws.row_dimensions[r].height = 30; r += 1
 
@@ -773,8 +856,8 @@ def aba_dac(ws, conf_dac, info_atu):
     _subtit(ws, r, f"BICOS (Reg. 1320)  –  Encerrante Inicial e Final {comp_atu}", 7); r += 1
     for i, h in enumerate([
         "Bico",
-        f"Enc. Inicial\nDAC", f"Enc. Inicial\nSPED", "Dif. Inicial",
-        f"Enc. Final\nDAC",   f"Enc. Final\nSPED",   "Dif. Final",
+        "Enc. Inicial\nDAC", "Enc. Inicial\nSPED", "Dif. Inicial",
+        "Enc. Final\nDAC",   "Enc. Final\nSPED",   "Dif. Final",
     ], 1): _ch(ws, r, i, h, bg=C_CINZA, fg=C_AZUL_ESC)
     ws.row_dimensions[r].height = 30; r += 1
 
@@ -791,7 +874,6 @@ def aba_dac(ws, conf_dac, info_atu):
         _dc(ws,r,7, x["dif_fin"], NF, bg=bg)
         ws.row_dimensions[r].height = 15; r += 1
 
-    # Larguras
     for i, w in enumerate([12, 22, 18, 18, 16, 18, 18, 16], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
@@ -814,7 +896,6 @@ def aba_dac_sped(ws, d_atu, info_atu):
     dt_ini= info.get("dt_ini","")
     dt_fin= info.get("dt_fin","")
 
-    # ── Cabeçalho ────────────────────────────────────────────────────────────
     _titulo(ws, r, "DAC – DOCUMENTO DE ACOMPANHAMENTO DE COMBUSTÍVEIS (gerado pelo SPED)", N, sz=12)
     ws.row_dimensions[r].height = 28; r += 1
 
@@ -851,11 +932,9 @@ def aba_dac_sped(ws, d_atu, info_atu):
         total_aj = round(sum(d_atu["tanques"][(t,dt)]["ajuste"]  for dt in dias),3)
         variacao = round(est_fin - est_ini, 3)
 
-        # Produto: capacidade do tanque
         cap = d_atu["tanques"].get((t,dias[0]),{}).get("capacidade")
         produto = f"{cap:,.0f} L" if cap else "—"
 
-        # Perda/Ganho: ajuste negativo = perda (vermelho), positivo = ganho (verde)
         if total_aj < 0:
             bg_aj = C_VERM_BG; fg_aj = C_VERM_FG
         elif total_aj > 0:
@@ -869,7 +948,6 @@ def aba_dac_sped(ws, d_atu, info_atu):
         _dc(ws,r,4,total_rec, NF, bg="D6E4F0" if total_rec>0 else None)
         _dc(ws,r,5,total_sai, NF)
         _dc(ws,r,6,total_evap,NF)
-        # Perda/Ganho com cor e fonte
         cel_aj = ws.cell(row=r,column=7,value=total_aj)
         cel_aj.number_format = NF
         cel_aj.font = Font(name="Arial",size=10,bold=(total_aj!=0),color=fg_aj)
@@ -908,7 +986,6 @@ def aba_dac_sped(ws, d_atu, info_atu):
         _dc(ws,r,4,litros, NF, bg=bg)
         ws.row_dimensions[r].height = 15; r += 1
 
-    # Total bicos
     for i,v in enumerate(["TOTAL","","",round(total_litros,3)],1):
         c=ws.cell(row=r,column=i,value=v)
         c.font=Font(name="Arial",bold=True,size=10)
@@ -918,6 +995,5 @@ def aba_dac_sped(ws, d_atu, info_atu):
         if i==4: c.number_format=NF
     ws.row_dimensions[r].height=18; r+=1
 
-    # Larguras
     for i,w in enumerate([12,14,18,18,18,16,14,18,16],1):
         ws.column_dimensions[get_column_letter(i)].width=w

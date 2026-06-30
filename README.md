@@ -1,46 +1,30 @@
-# Sistema LMC – Conferência SPED Fiscal
-## Cleodon Contabilidade
+# Sistema LMC – Cleodon Contabilidade
+## Conferência SPED Fiscal – Postos de Combustíveis
 
 ---
 
-## Como publicar no Render.com (passo a passo)
+## OPÇÃO 1: Usar no computador (GRATUITO)
 
-### Passo 1 – Criar conta no GitHub
-1. Acesse **github.com** e clique em **Sign up**
-2. Crie sua conta gratuitamente
+### Requisitos
+- Windows 7, 8, 10 ou 11
+- Conexão com internet (só na primeira instalação)
 
-### Passo 2 – Criar repositório e subir os arquivos
-1. Clique em **New repository**
-2. Nome: `sistema-lmc` → clique em **Create repository**
-3. Clique em **uploading an existing file**
-4. Extraia o ZIP e arraste **todos os arquivos** desta pasta
-5. Clique em **Commit changes**
+### Instalação (apenas uma vez)
+1. Baixe e extraia o arquivo ZIP numa pasta (ex: `C:\SistemaLMC`)
+2. Certifique-se de que o **Python** está instalado:
+   - Acesse: https://www.python.org/downloads/
+   - Baixe a versão mais recente e instale
+   - ⚠️ **IMPORTANTE:** marque a opção **"Add Python to PATH"**
+3. Clique duas vezes em **`instalar.bat`**
+4. Aguarde a instalação terminar
 
-### Passo 3 – Publicar no Render.com
-1. Acesse **render.com** e crie uma conta gratuita
-2. Clique em **New +** → **Web Service**
-3. Conecte sua conta GitHub → selecione o repositório `sistema-lmc`
-4. Preencha:
-   - **Name:** sistema-lmc
-   - **Runtime:** Python 3
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `gunicorn app:app --workers 4 --timeout 120`
-5. Clique em **Create Web Service**
-6. Aguarde ~2 minutos → o sistema estará no ar com uma URL pública
+### Como usar
+1. Clique duas vezes em **`iniciar.bat`**
+2. O navegador abre automaticamente em `http://localhost:5000`
+3. Faça login com suas credenciais
+4. Para encerrar, feche a janela preta do terminal
 
-### Passo 4 – Configurar a chave da API (para leitura automática do DAC)
-No painel do Render → **Environment** → adicionar:
-
-| Variável | Valor |
-|---|---|
-| `ANTHROPIC_API_KEY` | Sua chave em console.anthropic.com |
-
-> Sem essa chave o sistema funciona normalmente para os SPEDs — só não lê o DAC automaticamente.
-
----
-
-## Usuários do sistema
-
+### Usuários
 | Login | Senha |
 |---|---|
 | fiscal@cleodoncontabilidade.com.br | Cld@123 |
@@ -48,9 +32,33 @@ No painel do Render → **Environment** → adicionar:
 
 ---
 
-## Como atualizar o sistema após mudanças
-1. Substitua os arquivos modificados no repositório GitHub
-2. O Render faz o redeploy automaticamente em ~1 minuto
+## OPÇÃO 2: Usar na web (Render.com – US$ 7/mês)
 
-## Observação sobre o plano gratuito do Render
-O sistema pode "dormir" após 15 minutos sem acesso — na primeira visita pode demorar ~30s para acordar. Para acesso contínuo sem espera, considere o plano pago (US$ 7/mês).
+### Passo 1 – GitHub
+1. Crie conta em **github.com**
+2. Clique em **New repository** → nome: `sistema-lmc` → **Create**
+3. Clique em **uploading an existing file**
+4. Arraste todos os arquivos desta pasta → **Commit changes**
+
+### Passo 2 – Render.com
+1. Crie conta em **render.com**
+2. Clique em **New + → Web Service**
+3. Conecte o GitHub → selecione `sistema-lmc`
+4. Configure:
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `gunicorn app:app --workers 4 --timeout 120`
+5. Selecione o plano **Starter (US$ 7/mês)**
+6. Clique em **Create Web Service**
+
+---
+
+## Sobre o DAC
+O sistema lê automaticamente:
+- ✅ Excel (.xlsx) com seções ESTOQUE e MOVIMENTAÇÃO
+- ✅ PDF com texto extraível (AutoSystem PRO, Linx)
+- ❌ PDF escaneado ou imagem → gera relatório sem confronto DAC
+
+---
+
+## Suporte
+Em caso de dúvidas, entre em contato com o desenvolvedor.
