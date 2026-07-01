@@ -1050,6 +1050,12 @@ def aba_dac_sped(ws, d_atu, info_atu):
         ws.column_dimensions[get_column_letter(i)].width=w
 
 
+def _fmt(v, decimais=3):
+    """Formata número com segurança, retornando '—' se None."""
+    if v is None: return "—"
+    try: return f"{v:,.{decimais}f}"
+    except: return str(v)
+
 def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac, info_ant, info_atu):
     """Aba de relatório de divergências para envio ao cliente."""
     ws.sheet_view.showGridLines = False
@@ -1103,9 +1109,9 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
                     "secao": "Confronto entre meses",
                     "item": f"Tanque {x['id']}",
                     "status": x["status"],
-                    "detalhe": (f"Fechamento {comp_ant}: {x['fech']:,.3f} L  →  "
-                                f"Abertura {comp_atu}: {x['aber']:,.3f} L  |  "
-                                f"Diferença: {x['dif']:,.3f} L"),
+                    "detalhe": (f"Fechamento {comp_ant}: {_fmt(x['fech'])} L  →  "
+                                f"Abertura {comp_atu}: {_fmt(x['aber'])} L  |  "
+                                f"Diferença: {_fmt(x['dif'])} L"),
                     "orientacao": "Verificar se os estoques foram lançados corretamente no fechamento do mês anterior e na abertura do mês atual.",
                 })
         for x in conf_m["bicos"]:
@@ -1114,9 +1120,9 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
                     "secao": "Confronto entre meses",
                     "item": f"Bico {x['id']}",
                     "status": x["status"],
-                    "detalhe": (f"Encerrante final {comp_ant}: {x['fech']:,.3f}  →  "
-                                f"Encerrante inicial {comp_atu}: {x['aber']:,.3f}  |  "
-                                f"Diferença: {x['dif']:,.3f}"),
+                    "detalhe": (f"Encerrante final {comp_ant}: {_fmt(x['fech'])}  →  "
+                                f"Encerrante inicial {comp_atu}: {_fmt(x['aber'])}  |  "
+                                f"Diferença: {_fmt(x['dif'])}"),
                     "orientacao": "Conferir se o encerrante foi relançado corretamente na abertura do mês atual.",
                 })
 
@@ -1127,9 +1133,9 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
                 "secao": "Consistência diária",
                 "item": f"Tanque {x['tanque']}",
                 "status": x["status"],
-                "detalhe": (f"Fechamento {x['dia_fech'].strftime('%d/%m/%Y')}: {x['fech']:,.3f} L  →  "
-                            f"Abertura {x['dia_aber'].strftime('%d/%m/%Y')}: {x['aber']:,.3f} L  |  "
-                            f"Diferença: {x['dif']:,.3f} L"),
+                "detalhe": (f"Fechamento {x['dia_fech'].strftime('%d/%m/%Y')}: {_fmt(x['fech'])} L  →  "
+                            f"Abertura {x['dia_aber'].strftime('%d/%m/%Y')}: {_fmt(x['aber'])} L  |  "
+                            f"Diferença: {_fmt(x['dif'])} L"),
                 "orientacao": "O estoque de fechamento de um dia deve ser igual ao estoque de abertura do dia seguinte. Verificar lançamento.",
             })
     for x in d_mai["bicos"]:
@@ -1138,9 +1144,9 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
                 "secao": "Consistência diária",
                 "item": f"Bico {x['bico']}",
                 "status": x["status"],
-                "detalhe": (f"Encerrante {x['dia_fech'].strftime('%d/%m/%Y')}: {x['fech']:,.3f}  →  "
-                            f"Abertura {x['dia_aber'].strftime('%d/%m/%Y')}: {x['aber']:,.3f}  |  "
-                            f"Diferença: {x['dif']:,.3f}"),
+                "detalhe": (f"Encerrante {x['dia_fech'].strftime('%d/%m/%Y')}: {_fmt(x['fech'])}  →  "
+                            f"Abertura {x['dia_aber'].strftime('%d/%m/%Y')}: {_fmt(x['aber'])}  |  "
+                            f"Diferença: {_fmt(x['dif'])}"),
                 "orientacao": "O encerrante de fechamento deve ser igual ao encerrante de abertura do dia seguinte.",
             })
 
@@ -1155,7 +1161,7 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
             "item": f"{tipo} {iid}",
             "status": "❌ NEGATIVO",
             "detalhe": (f"Data: {x['data'].strftime('%d/%m/%Y') if x.get('data') else 'N/D'}  |  "
-                        f"Campo: {x['campo']}  |  Valor: {x['valor']:,.3f}"),
+                        f"Campo: {x['campo']}  |  Valor: {_fmt(x['valor'])}"),
             "orientacao": DIAGNOSTICO_CAMPO.get(x.get("campo",""), "Verificar lançamento deste campo no SPED."),
         })
 
@@ -1190,10 +1196,10 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
                 "secao": "Limite ANP 0,6%",
                 "item": f"Tanque {t['id']}",
                 "status": t["status_anp"],
-                "detalhe": (f"{tipo_var} de {abs(d_anp):,.3f} L  |  "
-                            f"Recebimento: {rec:,.3f} L  |  "
-                            f"Limite 0,6%: {lim:,.3f} L  |  "
-                            f"Variação: {pct:.3f}%"),
+                "detalhe": (f"{tipo_var} de {_fmt(abs(d_anp))} L  |  "
+                            f"Recebimento: {_fmt(rec)} L  |  "
+                            f"Limite 0,6%: {_fmt(lim)} L  |  "
+                            f"Variação: {_fmt(pct)}%"),
                 "orientacao": (f"A variação de estoque supera o limite de 0,6% do volume recebido permitido pela ANP. "
                                f"{'Verificar possível entrada não lançada ou venda a maior.' if tipo_var=='SOBRA' else 'Verificar possível venda não registrada, evaporação ou vazamento.'}"),
             })
@@ -1210,8 +1216,8 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
                         "secao": "DAC × SPED",
                         "item": f"Tanque {t['id']} ({t.get('produto','')})",
                         "status": st,
-                        "detalhe": (f"{tipo_val}  |  DAC: {val_dac:,.3f} L  |  "
-                                    f"SPED: {val_sped:,.3f} L  |  Diferença: {dif:,.3f} L"),
+                        "detalhe": (f"{tipo_val}  |  DAC: {_fmt(val_dac)} L  |  "
+                                    f"SPED: {_fmt(val_sped)} L  |  Diferença: {_fmt(dif)} L"),
                         "orientacao": t.get("diagnostico", "Verificar divergência entre o DAC enviado e o SPED transmitido."),
                     })
         for b in conf_dac.get("bicos", []):
@@ -1224,8 +1230,8 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
                         "secao": "DAC × SPED",
                         "item": f"Bico {b['id']}",
                         "status": st,
-                        "detalhe": (f"{tipo_val}  |  DAC: {val_dac:,.3f}  |  "
-                                    f"SPED: {val_sped:,.3f}  |  Diferença: {dif:,.3f}"),
+                        "detalhe": (f"{tipo_val}  |  DAC: {_fmt(val_dac)}  |  "
+                                    f"SPED: {_fmt(val_sped)}  |  Diferença: {_fmt(dif)}"),
                         "orientacao": "Verificar divergência entre o DAC enviado e o SPED transmitido.",
                     })
 
