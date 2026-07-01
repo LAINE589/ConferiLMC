@@ -164,6 +164,10 @@ def processar():
         if erro_dac:
             flash(f"Aviso DAC: {erro_dac}", "warning")
 
+        ws_rel = wb.create_sheet("Relatório ao Cliente")
+        aba_relatorio_cliente(ws_rel, conf_m, d_mai, neg_abr, neg_mai, vc_mai,
+                              conf_dac, d_ant, d_atu)
+
         buf = io.BytesIO()
         wb.save(buf); buf.seek(0)
 
@@ -1044,3 +1048,238 @@ def aba_dac_sped(ws, d_atu, info_atu):
 
     for i,w in enumerate([12,14,18,18,18,16,14,18,16],1):
         ws.column_dimensions[get_column_letter(i)].width=w
+
+
+def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac, info_ant, info_atu):
+    """Aba de relatório de divergências para envio ao cliente."""
+    ws.sheet_view.showGridLines = False
+    r = 1
+    N = 6
+
+    ia = info_ant.get("info", {})
+    iu = info_atu.get("info", {})
+    razao  = ia.get("razao","") or iu.get("razao","")
+    cnpj   = ia.get("cnpj","")  or iu.get("cnpj","")
+    dt_ini = iu.get("dt_ini","")
+    dt_fin = iu.get("dt_fin","")
+
+    def fmt_comp(dt):
+        meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        try: return f"{meses[int(dt[2:4])-1]}/{dt[4:]}"
+        except: return dt
+
+    comp_atu = fmt_comp(dt_fin)
+    comp_ant = fmt_comp(ia.get("dt_fin","")) if ia.get("dt_fin") else None
+    periodo  = f"{dt_ini[:2]}/{dt_ini[2:4]}/{dt_ini[4:]} a {dt_fin[:2]}/{dt_fin[2:4]}/{dt_fin[4:]}" if dt_ini else comp_atu
+
+    # ── Cabeçalho ─────────────────────────────────────────────────────────────
+    _titulo(ws, r, "RELATÓRIO DE DIVERGÊNCIAS – CONFERÊNCIA LMC", N, sz=13)
+    ws.row_dimensions[r].height = 30; r += 1
+
+    for texto_a, texto_e in [
+        (f"Empresa: {razao}", f"CNPJ: {cnpj}"),
+        (f"Competência: {periodo}", f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}"),
+        ("Elaborado por: Cleodon Contabilidade", ""),
+    ]:
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+        c1 = ws.cell(row=r, column=1, value=texto_a)
+        c1.font = Font(name="Arial", size=10, bold=True)
+        c1.alignment = Alignment(horizontal="left", vertical="center")
+        ws.merge_cells(start_row=r, start_column=5, end_row=r, end_column=N)
+        c2 = ws.cell(row=r, column=5, value=texto_e)
+        c2.font = Font(name="Arial", size=10, italic=True, color="595959")
+        c2.alignment = Alignment(horizontal="right", vertical="center")
+        ws.row_dimensions[r].height = 16; r += 1
+    r += 1
+
+    # Contagem total de divergências encontradas
+    divergencias = []
+
+    # ── 1. Confronto entre meses ──────────────────────────────────────────────
+    if comp_ant and (conf_m["tanques"] or conf_m["bicos"]):
+        for x in conf_m["tanques"]:
+            if x["status"] != "✅ OK":
+                divergencias.append({
+                    "secao": "Confronto entre meses",
+                    "item": f"Tanque {x['id']}",
+                    "status": x["status"],
+                    "detalhe": (f"Fechamento {comp_ant}: {x['fech']:,.3f} L  →  "
+                                f"Abertura {comp_atu}: {x['aber']:,.3f} L  |  "
+                                f"Diferença: {x['dif']:,.3f} L"),
+                    "orientacao": "Verificar se os estoques foram lançados corretamente no fechamento do mês anterior e na abertura do mês atual.",
+                })
+        for x in conf_m["bicos"]:
+            if x["status"] != "✅ OK":
+                divergencias.append({
+                    "secao": "Confronto entre meses",
+                    "item": f"Bico {x['id']}",
+                    "status": x["status"],
+                    "detalhe": (f"Encerrante final {comp_ant}: {x['fech']:,.3f}  →  "
+                                f"Encerrante inicial {comp_atu}: {x['aber']:,.3f}  |  "
+                                f"Diferença: {x['dif']:,.3f}"),
+                    "orientacao": "Conferir se o encerrante foi relançado corretamente na abertura do mês atual.",
+                })
+
+    # ── 2. Consistência diária ────────────────────────────────────────────────
+    for x in d_mai["tanques"]:
+        if x["status"] != "✅ OK":
+            divergencias.append({
+                "secao": "Consistência diária",
+                "item": f"Tanque {x['tanque']}",
+                "status": x["status"],
+                "detalhe": (f"Fechamento {x['dia_fech'].strftime('%d/%m/%Y')}: {x['fech']:,.3f} L  →  "
+                            f"Abertura {x['dia_aber'].strftime('%d/%m/%Y')}: {x['aber']:,.3f} L  |  "
+                            f"Diferença: {x['dif']:,.3f} L"),
+                "orientacao": "O estoque de fechamento de um dia deve ser igual ao estoque de abertura do dia seguinte. Verificar lançamento.",
+            })
+    for x in d_mai["bicos"]:
+        if x["status"] != "✅ OK":
+            divergencias.append({
+                "secao": "Consistência diária",
+                "item": f"Bico {x['bico']}",
+                "status": x["status"],
+                "detalhe": (f"Encerrante {x['dia_fech'].strftime('%d/%m/%Y')}: {x['fech']:,.3f}  →  "
+                            f"Abertura {x['dia_aber'].strftime('%d/%m/%Y')}: {x['aber']:,.3f}  |  "
+                            f"Diferença: {x['dif']:,.3f}"),
+                "orientacao": "O encerrante de fechamento deve ser igual ao encerrante de abertura do dia seguinte.",
+            })
+
+    # ── 3. Valores negativos ──────────────────────────────────────────────────
+    todos_neg = (neg_abr["tanques"] + neg_mai["tanques"] +
+                 neg_abr["bicos"]   + neg_mai["bicos"])
+    for x in todos_neg:
+        tipo = "Tanque" if "tanque" in x else "Bico"
+        iid  = x.get("tanque") or x.get("bico")
+        divergencias.append({
+            "secao": "Valores negativos",
+            "item": f"{tipo} {iid}",
+            "status": "❌ NEGATIVO",
+            "detalhe": (f"Data: {x['data'].strftime('%d/%m/%Y') if x.get('data') else 'N/D'}  |  "
+                        f"Campo: {x['campo']}  |  Valor: {x['valor']:,.3f}"),
+            "orientacao": DIAGNOSTICO_CAMPO.get(x.get("campo",""), "Verificar lançamento deste campo no SPED."),
+        })
+
+    # ── 4. Versão e capacidade ────────────────────────────────────────────────
+    if not vc_mai["versao_ok"]:
+        divergencias.append({
+            "secao": "Versão do SPED",
+            "item": "Registro 0000",
+            "status": "❌ VERSÃO INCORRETA",
+            "detalhe": f"Versão declarada: {vc_mai['versao']}  |  Versão obrigatória: {VERSAO_OBRIGATORIA}",
+            "orientacao": f"O SPED deve ser transmitido na versão {VERSAO_OBRIGATORIA}. Corrigir e retificar.",
+        })
+    for t in vc_mai["tanques"]:
+        if t["status"] != "✅ OK":
+            divergencias.append({
+                "secao": "Capacidade dos tanques",
+                "item": f"Tanque {t['tanque']}",
+                "status": t["status"],
+                "detalhe": t["obs"],
+                "orientacao": "A capacidade do tanque deve ser declarada corretamente no registro 1310 do SPED.",
+            })
+
+    # ── 5. Limite ANP 0,6% ───────────────────────────────────────────────────
+    for t in conf_m["tanques"]:
+        if t.get("status_anp") and t["status_anp"] != "✅ DENTRO DO LIMITE":
+            d_anp = t.get("diferenca_anp", 0) or 0
+            lim   = t.get("limite_anp", 0) or 0
+            rec   = t.get("total_rec", 0) or 0
+            pct   = t.get("pct_anp", 0) or 0
+            tipo_var = "SOBRA" if d_anp > 0 else "FALTA"
+            divergencias.append({
+                "secao": "Limite ANP 0,6%",
+                "item": f"Tanque {t['id']}",
+                "status": t["status_anp"],
+                "detalhe": (f"{tipo_var} de {abs(d_anp):,.3f} L  |  "
+                            f"Recebimento: {rec:,.3f} L  |  "
+                            f"Limite 0,6%: {lim:,.3f} L  |  "
+                            f"Variação: {pct:.3f}%"),
+                "orientacao": (f"A variação de estoque supera o limite de 0,6% do volume recebido permitido pela ANP. "
+                               f"{'Verificar possível entrada não lançada ou venda a maior.' if tipo_var=='SOBRA' else 'Verificar possível venda não registrada, evaporação ou vazamento.'}"),
+            })
+
+    # ── 6. DAC × SPED ─────────────────────────────────────────────────────────
+    if conf_dac:
+        for t in conf_dac.get("tanques", []):
+            for tipo_val, val_dac, val_sped, dif, st in [
+                ("Estoque inicial", t["ei_dac"], t["ei_sped"], t["dif_ini"], t["status_ini"]),
+                ("Estoque final",   t["ef_dac"], t["ef_sped"], t["dif_fin"], t["status_fin"]),
+            ]:
+                if st != "✅ OK" and dif is not None and abs(dif) >= 0.01:
+                    divergencias.append({
+                        "secao": "DAC × SPED",
+                        "item": f"Tanque {t['id']} ({t.get('produto','')})",
+                        "status": st,
+                        "detalhe": (f"{tipo_val}  |  DAC: {val_dac:,.3f} L  |  "
+                                    f"SPED: {val_sped:,.3f} L  |  Diferença: {dif:,.3f} L"),
+                        "orientacao": t.get("diagnostico", "Verificar divergência entre o DAC enviado e o SPED transmitido."),
+                    })
+        for b in conf_dac.get("bicos", []):
+            for tipo_val, val_dac, val_sped, dif, st in [
+                ("Enc. inicial", b["ei_dac"], b["ei_sped"], b["dif_ini"], b["status_ini"]),
+                ("Enc. final",   b["ef_dac"], b["ef_sped"], b["dif_fin"], b["status_fin"]),
+            ]:
+                if st != "✅ OK" and dif is not None and abs(dif) >= 0.01:
+                    divergencias.append({
+                        "secao": "DAC × SPED",
+                        "item": f"Bico {b['id']}",
+                        "status": st,
+                        "detalhe": (f"{tipo_val}  |  DAC: {val_dac:,.3f}  |  "
+                                    f"SPED: {val_sped:,.3f}  |  Diferença: {dif:,.3f}"),
+                        "orientacao": "Verificar divergência entre o DAC enviado e o SPED transmitido.",
+                    })
+
+    # ── Resumo de status ──────────────────────────────────────────────────────
+    n_div = len(divergencias)
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N)
+    resumo_txt = (f"✅  Nenhuma divergência encontrada — SPED e DAC estão em conformidade."
+                  if n_div == 0
+                  else f"⚠️  {n_div} divergência(s) encontrada(s) — verificar itens abaixo.")
+    c_res = ws.cell(row=r, column=1, value=resumo_txt)
+    c_res.font = Font(name="Arial", bold=True, size=11,
+                      color=C_VERDE_FG if n_div==0 else C_VERM_FG)
+    c_res.fill = PatternFill("solid",
+                             start_color=C_VERDE_BG if n_div==0 else C_AMAR_BG)
+    c_res.alignment = Alignment(horizontal="left", vertical="center")
+    c_res.border = _brd()
+    ws.row_dimensions[r].height = 22; r += 2
+
+    if n_div == 0:
+        for i, w in enumerate([20, 20, 20, 30, 30, 50], 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        return
+
+    # ── Tabela de divergências ─────────────────────────────────────────────────
+    for i, h in enumerate(["Seção", "Item", "Status", "Detalhe", "Orientação ao Cliente"], 1):
+        _ch(ws, r, i, h)
+    ws.row_dimensions[r].height = 24; r += 1
+
+    secao_atual = None
+    for div in divergencias:
+        if div["secao"] != secao_atual:
+            secao_atual = div["secao"]
+            _subtit(ws, r, secao_atual, N); r += 1
+
+        st = div["status"]
+        bg = (C_VERM_BG if "❌" in st else C_AMAR_BG)
+        fg = (C_VERM_FG if "❌" in st else C_AMAR_FG)
+
+        _dc(ws, r, 1, div["secao"], bg=bg)
+        _dc(ws, r, 2, div["item"],   bg=bg)
+        cel_st = ws.cell(row=r, column=3, value=st)
+        cel_st.font = Font(name="Arial", bold=True, size=10, color=fg)
+        cel_st.fill = PatternFill("solid", start_color=bg)
+        cel_st.alignment = Alignment(horizontal="center", vertical="center")
+        cel_st.border = _brd()
+
+        for col, txt in [(4, div["detalhe"]), (5, div["orientacao"])]:
+            cel = ws.cell(row=r, column=col, value=txt)
+            cel.font = Font(name="Arial", size=9)
+            cel.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            cel.border = _brd()
+            cel.fill = PatternFill("solid", start_color=bg)
+
+        ws.row_dimensions[r].height = 36; r += 1
+
+    for i, w in enumerate([22, 18, 22, 55, 60], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
