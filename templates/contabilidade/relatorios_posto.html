@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Relatórios – {{ posto.razao_social }}{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <div class="sidebar-sec">Contabilidade</div>
+  <a href="/contabilidade/postos">⛽ Meus Postos</a>
+  <div class="sidebar-sec">Sistema</div>
+  <a href="/sistema">🔍 Conferência</a>
+</div>
+{% endblock %}
+{% block content %}
+<div style="margin-bottom:20px">
+  <a href="/contabilidade/postos" style="color:var(--azul2);font-size:.85rem">← Voltar aos Postos</a>
+</div>
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h2 style="color:var(--azul)">{{ posto.razao_social }}</h2>
+      <div style="font-size:.82rem;color:#666;margin-top:4px">
+        CNPJ: {{ posto.cnpj }} &nbsp;|&nbsp; {{ posto.cidade }}/{{ posto.estado }}
+        &nbsp;|&nbsp; <span class="badge {{ 'badge-ok' if posto.licenca_ativa else 'badge-inativo' }}">{{ 'Licença Ativa' if posto.licenca_ativa else 'Licença Inativa' }}</span>
+      </div>
+    </div>
+    <div style="font-size:.82rem;color:#666">
+      {{ relatorios|length }} relatório(s) gerado(s)
+    </div>
+  </div>
+</div>
+<div class="card">
+  <div class="card-title">Histórico de Relatórios</div>
+  <table>
+    <tr><th>Competência</th><th>Gerado em</th><th>Por</th><th>DAC</th><th>Divergências</th><th>Status</th><th>Download</th></tr>
+    {% for r in relatorios %}
+    <tr>
+      <td>{{ r.competencia_ant or '—' }} → <strong>{{ r.competencia_atu }}</strong></td>
+      <td>{{ r.gerado_em.strftime('%d/%m/%Y %H:%M') }}</td>
+      <td style="font-size:.78rem;color:#666">{{ r.gerado_por }}</td>
+      <td style="text-align:center">{{ '✅' if r.tem_dac else '—' }}</td>
+      <td style="text-align:center">{{ r.total_divergencias }}</td>
+      <td><span class="badge badge-{{ r.status_geral }}">{{ r.status_icone }} {{ r.status_geral|upper }}</span></td>
+      <td>{% if r.arquivo_nome %}<a href="/relatorio/{{ r.id }}/download" class="btn btn-sm btn-outline">⬇️ Baixar</a>{% else %}—{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" style="text-align:center;color:#999;padding:24px">Nenhum relatório gerado ainda para este posto.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

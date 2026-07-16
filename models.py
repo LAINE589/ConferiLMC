@@ -1,89 +1,114 @@
-{% extends "base.html" %}
-{% block title %}Enviar SPED{% endblock %}
-{% block sidebar %}
-<div class="sidebar">
-  <div class="sidebar-sec">Meu Posto</div>
-  <a href="/posto">🏠 Painel</a>
-  <a href="/posto/conferir" class="ativo">📤 Enviar SPED</a>
-  <div class="sidebar-sec">Conta</div>
-  <a href="/perfil">🔑 Alterar Senha</a>
-</div>
-{% endblock %}
-{% block content %}
-<div style="margin-bottom:16px">
-  <a href="/posto" style="color:var(--azul2);font-size:.85rem">← Voltar ao Painel</a>
-</div>
-<h2 style="margin-bottom:20px;color:var(--azul)">Verificar SPED Fiscal</h2>
+"""
+Modelos do banco de dados – Sistema LMC SaaS
+Hierarquia: Admin → Contabilidade → Posto
+"""
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
 
-<div class="card">
-  <div class="alert alert-info" style="margin-bottom:20px">
-    <strong>ℹ️ Como funciona:</strong> envie os arquivos SPED do mês anterior (opcional) e do mês atual.
-    O sistema gera automaticamente um relatório com todas as divergências encontradas.
-    O arquivo do SPED não é armazenado — apenas o relatório Excel resultante.
-  </div>
+db = SQLAlchemy()
 
-  <form method="POST" action="/posto/processar" enctype="multipart/form-data" id="form-posto">
-    <!-- SPED anterior -->
-    <div class="form-group">
-      <label>📁 SPED Competência Anterior <span style="color:#999;font-weight:400">(opcional — necessário para confronto entre meses)</span></label>
-      <input type="file" name="ant" accept=".txt" onchange="marcarArquivo(this,'label-ant')">
-      <div id="label-ant" style="font-size:.78rem;color:#999;margin-top:4px">Nenhum arquivo selecionado</div>
-    </div>
+PERFIL_ADMIN         = "admin"
+PERFIL_CONTABILIDADE = "contabilidade"
+PERFIL_POSTO         = "posto"
 
-    <!-- SPED atual -->
-    <div class="form-group">
-      <label>📁 SPED Competência Atual <span style="color:var(--verm)">*</span></label>
-      <input type="file" name="atu" accept=".txt" required onchange="marcarArquivo(this,'label-atu')">
-      <div id="label-atu" style="font-size:.78rem;color:#999;margin-top:4px">Nenhum arquivo selecionado</div>
-    </div>
+PLANO_MENSAL = "mensal"
+PLANO_ANUAL  = "anual"
+PLANO_UNICO  = "unico"
 
-    <!-- DAC opcional -->
-    <div class="form-group">
-      <label>📁 DAC (Documento de Apuração de Combustíveis) <span style="color:#999;font-weight:400">(opcional — PDF ou Excel)</span></label>
-      <input type="file" name="dac" accept=".pdf,.xlsx,.xls" onchange="marcarArquivo(this,'label-dac')">
-      <div id="label-dac" style="font-size:.78rem;color:#999;margin-top:4px">Nenhum arquivo selecionado</div>
-    </div>
 
-    <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
-      <button type="submit" class="btn btn-primary" id="btn-enviar" style="font-size:.95rem;padding:11px 28px">
-        ⚙️ Gerar Relatório
-      </button>
-      <div id="loading" style="display:none;color:#666;font-size:.85rem">
-        ⏳ Processando... aguarde.
-      </div>
-    </div>
-  </form>
-</div>
+class Contabilidade(db.Model):
+    __tablename__ = "contabilidades"
+    id         = db.Column(db.Integer, primary_key=True)
+    nome       = db.Column(db.String(200), nullable=False)
+    cnpj       = db.Column(db.String(20), unique=True, nullable=False)
+    email      = db.Column(db.String(200), unique=True, nullable=False)
+    telefone   = db.Column(db.String(30))
+    ativa      = db.Column(db.Boolean, default=True)
+    criada_em  = db.Column(db.DateTime, default=datetime.utcnow)
+    usuarios   = db.relationship("Usuario", back_populates="contabilidade",
+                                 foreign_keys="Usuario.contabilidade_id")
+    postos     = db.relationship("Posto", back_populates="contabilidade")
 
-<div class="card" style="background:#f8faff">
-  <div class="card-title">O que é verificado</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:.84rem">
-    <div>✅ Consistência diária (fechamento = abertura)</div>
-    <div>✅ Confronto entre meses (se enviado SPED anterior)</div>
-    <div>✅ Valores negativos em tanques e bicos</div>
-    <div>✅ Versão do SPED (obrigatório versão 020)</div>
-    <div>✅ Capacidade declarada dos tanques</div>
-    <div>✅ Limite ANP de 0,6% sobre recebimentos</div>
-    <div>✅ DAC × SPED (se enviado arquivo DAC)</div>
-    <div>✅ Relatório de divergências para envio ao cliente</div>
-  </div>
-</div>
 
-<script>
-function marcarArquivo(input, labelId) {
-  const label = document.getElementById(labelId);
-  if (input.files.length > 0) {
-    label.textContent = '✅ ' + input.files[0].name;
-    label.style.color = 'var(--verde)';
-  } else {
-    label.textContent = 'Nenhum arquivo selecionado';
-    label.style.color = '#999';
-  }
-}
+class Posto(db.Model):
+    __tablename__ = "postos"
+    id               = db.Column(db.Integer, primary_key=True)
+    cnpj             = db.Column(db.String(20), unique=True, nullable=False)
+    razao_social     = db.Column(db.String(200), nullable=False)
+    nome_fantasia    = db.Column(db.String(200))
+    email            = db.Column(db.String(200))
+    telefone         = db.Column(db.String(30))
+    cidade           = db.Column(db.String(100))
+    estado           = db.Column(db.String(2))
+    ativo            = db.Column(db.Boolean, default=True)
+    plano            = db.Column(db.String(20), default=PLANO_MENSAL)
+    licenca_ativa    = db.Column(db.Boolean, default=True)
+    licenca_expira   = db.Column(db.DateTime, nullable=True)
+    contabilidade_id = db.Column(db.Integer, db.ForeignKey("contabilidades.id"), nullable=True)
+    contabilidade    = db.relationship("Contabilidade", back_populates="postos")
+    criado_em        = db.Column(db.DateTime, default=datetime.utcnow)
+    usuarios         = db.relationship("Usuario", back_populates="posto",
+                                       foreign_keys="Usuario.posto_id")
+    relatorios       = db.relationship("Relatorio", back_populates="posto",
+                                       order_by="Relatorio.gerado_em.desc()")
 
-document.getElementById('form-posto').onsubmit = function() {
-  document.getElementById('btn-enviar').disabled = true;
-  document.getElementById('loading').style.display = 'inline';
-};
-</script>
-{% endblock %}
+
+class Usuario(db.Model, UserMixin):
+    __tablename__ = "usuarios"
+    id               = db.Column(db.Integer, primary_key=True)
+    email            = db.Column(db.String(200), unique=True, nullable=False)
+    senha_hash       = db.Column(db.String(256), nullable=False)
+    nome             = db.Column(db.String(200), nullable=False)
+    perfil           = db.Column(db.String(20), nullable=False)
+    ativo            = db.Column(db.Boolean, default=True)
+    criado_em        = db.Column(db.DateTime, default=datetime.utcnow)
+    ultimo_acesso    = db.Column(db.DateTime, nullable=True)
+    contabilidade_id = db.Column(db.Integer, db.ForeignKey("contabilidades.id"), nullable=True)
+    posto_id         = db.Column(db.Integer, db.ForeignKey("postos.id"), nullable=True)
+    contabilidade    = db.relationship("Contabilidade", back_populates="usuarios",
+                                       foreign_keys=[contabilidade_id])
+    posto            = db.relationship("Posto", back_populates="usuarios",
+                                       foreign_keys=[posto_id])
+
+    def set_senha(self, senha):
+        self.senha_hash = generate_password_hash(senha)
+
+    def check_senha(self, senha):
+        return check_password_hash(self.senha_hash, senha)
+
+    @property
+    def is_admin(self):         return self.perfil == PERFIL_ADMIN
+    @property
+    def is_contabilidade(self): return self.perfil == PERFIL_CONTABILIDADE
+    @property
+    def is_posto(self):         return self.perfil == PERFIL_POSTO
+
+    # Retorna nome da organização do usuário
+    @property
+    def organizacao(self):
+        if self.is_posto and self.posto:
+            return self.posto.razao_social
+        if self.is_contabilidade and self.contabilidade:
+            return self.contabilidade.nome
+        return "Administração"
+
+
+class Relatorio(db.Model):
+    __tablename__ = "relatorios"
+    id                 = db.Column(db.Integer, primary_key=True)
+    posto_id           = db.Column(db.Integer, db.ForeignKey("postos.id"), nullable=False)
+    posto              = db.relationship("Posto", back_populates="relatorios")
+    competencia_ant    = db.Column(db.String(10), nullable=True)
+    competencia_atu    = db.Column(db.String(10), nullable=False)
+    gerado_em          = db.Column(db.DateTime, default=datetime.utcnow)
+    gerado_por         = db.Column(db.String(200))
+    total_divergencias = db.Column(db.Integer, default=0)
+    tem_dac            = db.Column(db.Boolean, default=False)
+    status_geral       = db.Column(db.String(20), default="ok")  # ok / alerta / critico
+    arquivo_nome       = db.Column(db.String(300), nullable=True)
+
+    @property
+    def status_icone(self):
+        return {"ok": "✅", "alerta": "⚠️", "critico": "❌"}.get(self.status_geral, "—")

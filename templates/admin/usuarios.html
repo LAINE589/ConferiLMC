@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Usuários{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <div class="sidebar-sec">Admin</div>
+  <a href="/admin">📊 Dashboard</a>
+  <a href="/admin/contabilidades">🏢 Contabilidades</a>
+  <a href="/admin/postos">⛽ Postos</a>
+  <a href="/admin/usuarios" class="ativo">👤 Usuários</a>
+  <a href="/admin/relatorios">📄 Relatórios</a>
+  <div class="sidebar-sec">Sistema</div>
+  <a href="/sistema">🔍 Conferência</a>
+</div>
+{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:20px;color:var(--azul)">Gerenciar Usuários</h2>
+
+<!-- FORMULÁRIO DE CADASTRO -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-title">➕ Novo Usuário</div>
+  <form method="POST" action="/admin/usuarios/novo">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+      <div class="form-group">
+        <label>Nome *</label>
+        <input name="nome" placeholder="Nome completo" required>
+      </div>
+      <div class="form-group">
+        <label>E-mail *</label>
+        <input name="email" type="email" placeholder="email@exemplo.com" required>
+      </div>
+      <div class="form-group">
+        <label>Senha *</label>
+        <input name="senha" type="password" placeholder="Mínimo 6 caracteres" required>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px">
+      <div class="form-group">
+        <label>Perfil *</label>
+        <select name="perfil" id="sel-perfil" onchange="toggleCont()">
+          <option value="contabilidade">Contabilidade</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group" id="div-cont">
+        <label>Contabilidade vinculada</label>
+        <select name="contabilidade_id">
+          <option value="">— Selecione —</option>
+          {% for c in contabilidades %}
+          <option value="{{ c.id }}">{{ c.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:4px">Cadastrar Usuário</button>
+  </form>
+</div>
+
+<!-- LISTA DE USUÁRIOS -->
+<div class="card">
+  <div class="card-title">👤 Usuários Cadastrados ({{ usuarios|length }})</div>
+  <table>
+    <tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Vinculação</th><th>Último Acesso</th><th>Status</th><th>Ações</th></tr>
+    {% for u in usuarios %}
+    <tr>
+      <td><strong>{{ u.nome }}</strong></td>
+      <td style="font-size:.82rem">{{ u.email }}</td>
+      <td>
+        <span class="badge {{ 'badge-critico' if u.perfil=='admin' else 'badge-alerta' if u.perfil=='contabilidade' else 'badge-ok' }}">
+          {{ '👑 ADMIN' if u.perfil=='admin' else '🏢 CONT.' if u.perfil=='contabilidade' else '⛽ POSTO' }}
+        </span>
+      </td>
+      <td style="font-size:.82rem">{{ u.organizacao }}</td>
+      <td style="font-size:.78rem;color:#888">
+        {{ u.ultimo_acesso.strftime('%d/%m/%Y %H:%M') if u.ultimo_acesso else '—' }}
+      </td>
+      <td>
+        <span class="badge {{ 'badge-ok' if u.ativo else 'badge-inativo' }}">
+          {{ 'Ativo' if u.ativo else 'Inativo' }}
+        </span>
+      </td>
+      <td style="white-space:nowrap">
+        {% if u.email != usuario.email %}
+        <!-- Toggle ativo/inativo -->
+        <a href="/admin/usuario/{{ u.id }}/toggle"
+           class="btn btn-sm {{ 'btn-outline' if u.ativo else 'btn-success' }}"
+           onclick="return confirm('{{ 'Desativar' if u.ativo else 'Ativar' }} o usuário {{ u.nome }}?')">
+          {{ '🔒' if u.ativo else '🔓' }}
+        </a>
+        <!-- Redefinir senha -->
+        <button class="btn btn-sm btn-outline" style="margin-left:4px"
+                onclick="abrirReset({{ u.id }}, '{{ u.nome }}')">🔑</button>
+        {% else %}
+        <span style="color:#999;font-size:.75rem">Você</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" style="text-align:center;color:#999;padding:20px">Nenhum usuário cadastrado.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<!-- MODAL RESET SENHA -->
+<div id="modal-reset" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:28px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <h3 style="margin-bottom:16px;color:var(--azul)">🔑 Redefinir Senha</h3>
+    <p id="modal-nome" style="margin-bottom:14px;color:#555;font-size:.88rem"></p>
+    <form id="form-reset" method="POST">
+      <div class="form-group">
+        <label>Nova senha *</label>
+        <input name="nova_senha" type="password" placeholder="Mínimo 6 caracteres" required minlength="6">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn btn-primary">Salvar</button>
+        <button type="button" class="btn btn-outline" onclick="fecharReset()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleCont() {
+  const p = document.getElementById('sel-perfil').value;
+  document.getElementById('div-cont').style.display = p === 'contabilidade' ? 'block' : 'none';
+}
+function abrirReset(uid, nome) {
+  document.getElementById('form-reset').action = '/admin/usuario/' + uid + '/resetar_senha';
+  document.getElementById('modal-nome').textContent = 'Usuário: ' + nome;
+  document.getElementById('modal-reset').style.display = 'flex';
+}
+function fecharReset() {
+  document.getElementById('modal-reset').style.display = 'none';
+}
+toggleCont();
+</script>
+{% endblock %}

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Sistema LMC{% endblock %} – Cleodon Contabilidade</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;background:#f0f4f8;min-height:100vh;color:#1a2340}
+    :root{--azul:#1F3864;--azul2:#2E75B6;--verde:#375623;--verd-bg:#C6EFCE;
+          --verm:#9C0006;--verm-bg:#FFC7CE;--amar:#7D6608;--amar-bg:#FFEB9C}
+
+    /* NAVBAR */
+    .navbar{background:var(--azul);color:#fff;padding:0 24px;display:flex;
+            align-items:center;justify-content:space-between;height:56px;
+            position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+    .navbar-brand{font-size:1rem;font-weight:700;letter-spacing:.3px}
+    .navbar-sub{font-size:.72rem;opacity:.7;margin-top:1px}
+    .navbar-right{display:flex;align-items:center;gap:16px;font-size:.82rem}
+    .navbar-right a{color:#cde;text-decoration:none}
+    .navbar-right a:hover{color:#fff}
+    .badge-perfil{background:rgba(255,255,255,.15);border-radius:12px;
+                  padding:2px 10px;font-size:.72rem}
+
+    /* SIDEBAR */
+    .layout{display:flex;min-height:calc(100vh - 56px)}
+    .sidebar{width:220px;background:#fff;border-right:1px solid #dde;
+             padding:20px 0;flex-shrink:0}
+    .sidebar a{display:block;padding:10px 20px;color:#334;font-size:.85rem;
+               text-decoration:none;border-left:3px solid transparent}
+    .sidebar a:hover,.sidebar a.ativo{background:#eef2ff;color:var(--azul);
+                                       border-left-color:var(--azul2)}
+    .sidebar-sec{font-size:.7rem;color:#999;padding:12px 20px 4px;
+                 text-transform:uppercase;letter-spacing:.5px}
+    .main{flex:1;padding:28px;max-width:1100px}
+
+    /* CARDS */
+    .card{background:#fff;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.1);
+          padding:20px;margin-bottom:20px}
+    .card-title{font-size:.95rem;font-weight:700;color:var(--azul);margin-bottom:14px}
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+    .stat-card{background:#fff;border-radius:10px;padding:18px;text-align:center;
+               box-shadow:0 1px 4px rgba(0,0,0,.08);border-top:3px solid var(--azul2)}
+    .stat-num{font-size:2rem;font-weight:700;color:var(--azul)}
+    .stat-label{font-size:.78rem;color:#666;margin-top:4px}
+
+    /* TABELA */
+    table{width:100%;border-collapse:collapse;font-size:.84rem}
+    th{background:var(--azul);color:#fff;padding:9px 12px;text-align:left;font-weight:600}
+    td{padding:8px 12px;border-bottom:1px solid #eee}
+    tr:hover td{background:#f8faff}
+    .badge{border-radius:12px;padding:2px 10px;font-size:.75rem;font-weight:600}
+    .badge-ok{background:var(--verd-bg);color:var(--verde)}
+    .badge-alerta{background:var(--amar-bg);color:var(--amar)}
+    .badge-critico{background:var(--verm-bg);color:var(--verm)}
+    .badge-inativo{background:#eee;color:#888}
+
+    /* FORMULÁRIO */
+    .form-group{margin-bottom:14px}
+    label{display:block;font-size:.83rem;font-weight:600;color:#334;margin-bottom:5px}
+    input,select{width:100%;padding:9px 12px;border:1px solid #ccd;border-radius:6px;
+                 font-size:.88rem;outline:none}
+    input:focus,select:focus{border-color:var(--azul2);box-shadow:0 0 0 2px #dde8ff}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+    /* BOTÕES */
+    .btn{padding:9px 20px;border:none;border-radius:6px;font-size:.86rem;
+         cursor:pointer;text-decoration:none;display:inline-block;font-weight:600}
+    .btn-primary{background:var(--azul);color:#fff}
+    .btn-primary:hover{background:var(--azul2)}
+    .btn-success{background:#375623;color:#fff}
+    .btn-danger{background:#9C0006;color:#fff}
+    .btn-sm{padding:5px 12px;font-size:.78rem}
+    .btn-outline{background:#fff;border:1px solid var(--azul);color:var(--azul)}
+
+    /* ALERTAS */
+    .alert{padding:10px 16px;border-radius:6px;margin-bottom:16px;font-size:.86rem}
+    .alert-success{background:var(--verd-bg);color:var(--verde)}
+    .alert-danger{background:var(--verm-bg);color:var(--verm)}
+    .alert-warning{background:var(--amar-bg);color:var(--amar)}
+    .alert-info{background:#dde8ff;color:var(--azul)}
+  </style>
+</head>
+<body>
+<nav class="navbar">
+  <div>
+    <div class="navbar-brand">⛽ Sistema LMC – Conferência SPED Fiscal</div>
+    <div class="navbar-sub">Postos de Combustíveis</div>
+  </div>
+  <div class="navbar-right">
+    <span class="badge-perfil">{{ usuario.perfil|upper }}</span>
+    <span>{{ usuario.nome }}</span>
+    <a href="/perfil">Minha Conta</a>
+    <a href="/logout">Sair</a>
+  </div>
+</nav>
+<div class="layout">
+  {% block sidebar %}{% endblock %}
+  <div class="main">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in msgs %}
+        <div class="alert alert-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+</div>
+</body>
+</html>

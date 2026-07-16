@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Meus Postos{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <div class="sidebar-sec">Contabilidade</div>
+  <a href="/contabilidade/postos" class="ativo">⛽ Meus Postos</a>
+  <div class="sidebar-sec">Sistema</div>
+  <a href="/sistema">🔍 Conferência</a>
+</div>
+{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:20px;color:var(--azul)">Meus Postos ({{ postos|length }})</h2>
+<div class="card">
+  <table>
+    <tr><th>Posto</th><th>CNPJ</th><th>Cidade/UF</th><th>Último Relatório</th><th>Status</th><th>Relatórios</th></tr>
+    {% for p in postos %}
+    <tr>
+      <td>
+        <strong><a href="/contabilidade/posto/{{ p.id }}/relatorios" style="color:var(--azul);text-decoration:none">{{ p.razao_social }}</a></strong>
+        {% if p.nome_fantasia %}<br><small style="color:#999">{{ p.nome_fantasia }}</small>{% endif %}
+      </td>
+      <td style="font-family:monospace;font-size:.8rem">{{ p.cnpj }}</td>
+      <td>{{ p.cidade }}/{{ p.estado }}</td>
+      <td>
+        {% if p.relatorios %}
+          {{ p.relatorios[0].gerado_em.strftime('%d/%m/%Y') }}
+          <span class="badge badge-{{ p.relatorios[0].status_geral }}">{{ p.relatorios[0].status_icone }}</span>
+        {% else %}
+          <span style="color:#999">Nenhum</span>
+        {% endif %}
+      </td>
+      <td><span class="badge {{ 'badge-ok' if p.licenca_ativa else 'badge-inativo' }}">{{ 'Ativo' if p.licenca_ativa else 'Inativo' }}</span></td>
+      <td><a href="/contabilidade/posto/{{ p.id }}/relatorios" class="btn btn-sm btn-outline">📄 Ver ({{ p.relatorios|length }})</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" style="text-align:center;color:#999;padding:24px">Nenhum posto vinculado ainda.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

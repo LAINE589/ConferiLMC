@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Contabilidades{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <a href="/admin">📊 Dashboard</a>
+  <a href="/admin/postos">⛽ Postos</a>
+  <a href="/admin/contabilidades" class="ativo">🏢 Contabilidades</a>
+</div>
+{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+  <h2 style="color:var(--azul)">Contabilidades ({{ lista|length }})</h2>
+  <a href="/admin/contabilidades/nova" class="btn btn-primary">+ Nova Contabilidade</a>
+</div>
+<div class="card">
+  <table>
+    <tr><th>Nome</th><th>CNPJ</th><th>E-mail</th><th>Postos</th><th>Status</th></tr>
+    {% for c in lista %}
+    <tr>
+      <td><strong>{{ c.nome }}</strong></td>
+      <td>{{ c.cnpj }}</td>
+      <td>{{ c.email }}</td>
+      <td>{{ c.postos|length }}</td>
+      <td><span class="badge {{ 'badge-ok' if c.ativa else 'badge-inativo' }}">{{ 'Ativa' if c.ativa else 'Inativa' }}</span></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="text-align:center;color:#999;padding:20px">Nenhuma contabilidade cadastrada.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

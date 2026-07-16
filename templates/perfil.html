@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Minha Conta{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  {% if usuario.is_admin %}
+  <a href="/admin">📊 Dashboard</a>
+  {% elif usuario.is_contabilidade %}
+  <a href="/sistema">🔍 Conferência</a>
+  <a href="/contabilidade/postos">⛽ Meus Postos</a>
+  {% else %}
+  <a href="/posto">🏠 Painel</a>
+  <a href="/posto/conferir">📤 Enviar SPED</a>
+  {% endif %}
+  <div class="sidebar-sec">Conta</div>
+  <a href="/perfil" class="ativo">🔑 Minha Conta</a>
+</div>
+{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:20px;color:var(--azul)">Minha Conta</h2>
+<div class="card" style="max-width:500px;margin-bottom:20px">
+  <div class="card-title">Informações</div>
+  <table style="width:100%">
+    <tr><td style="color:#666;width:140px">Nome</td><td><strong>{{ usuario.nome }}</strong></td></tr>
+    <tr><td style="color:#666">E-mail</td><td>{{ usuario.email }}</td></tr>
+    <tr><td style="color:#666">Perfil</td><td><span class="badge badge-{{ 'ok' if usuario.is_admin else 'alerta' if usuario.is_contabilidade else 'info' }}">{{ usuario.perfil|upper }}</span></td></tr>
+    <tr><td style="color:#666">Organização</td><td>{{ usuario.organizacao }}</td></tr>
+    <tr><td style="color:#666">Último acesso</td><td>{{ usuario.ultimo_acesso.strftime('%d/%m/%Y %H:%M') if usuario.ultimo_acesso else '—' }}</td></tr>
+  </table>
+</div>
+
+<div class="card" style="max-width:500px">
+  <div class="card-title">Alterar Senha</div>
+  <form method="POST">
+    <div class="form-group">
+      <label>Senha atual *</label>
+      <input type="password" name="senha_atual" required>
+    </div>
+    <div class="form-group">
+      <label>Nova senha *</label>
+      <input type="password" name="senha_nova" required minlength="6">
+    </div>
+    <div class="form-group">
+      <label>Confirmar nova senha *</label>
+      <input type="password" name="confirmacao" required>
+    </div>
+    <button class="btn btn-primary">Alterar Senha</button>
+  </form>
+</div>
+{% endblock %}

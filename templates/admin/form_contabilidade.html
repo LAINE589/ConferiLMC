@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Nova Contabilidade{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <a href="/admin">📊 Dashboard</a>
+  <a href="/admin/contabilidades" class="ativo">🏢 Contabilidades</a>
+</div>
+{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:20px;color:var(--azul)">Cadastrar Contabilidade</h2>
+<div class="card" style="max-width:600px">
+  <form method="POST">
+    <div class="form-row">
+      <div class="form-group"><label>Nome *</label><input name="nome" required></div>
+      <div class="form-group"><label>CNPJ *</label><input name="cnpj" required></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>E-mail de acesso *</label><input name="email" type="email" required></div>
+      <div class="form-group"><label>Telefone</label><input name="telefone"></div>
+    </div>
+    <div class="form-group"><label>Senha de acesso *</label><input name="senha" type="password" required></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary">Cadastrar</button>
+      <a href="/admin/contabilidades" class="btn btn-outline">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

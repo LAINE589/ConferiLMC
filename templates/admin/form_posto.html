@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Novo Posto{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <a href="/admin">📊 Dashboard</a>
+  <a href="/admin/postos" class="ativo">⛽ Postos</a>
+  <a href="/admin/contabilidades">🏢 Contabilidades</a>
+</div>
+{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:20px;color:var(--azul)">Cadastrar Novo Posto</h2>
+<div class="card" style="max-width:700px">
+  <form method="POST">
+    <div class="form-row">
+      <div class="form-group"><label>CNPJ *</label><input name="cnpj" placeholder="00.000.000/0001-00" required></div>
+      <div class="form-group"><label>Razão Social *</label><input name="razao_social" required></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Nome Fantasia</label><input name="nome_fantasia"></div>
+      <div class="form-group"><label>Telefone</label><input name="telefone"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Cidade</label><input name="cidade"></div>
+      <div class="form-group"><label>Estado</label><input name="estado" maxlength="2" placeholder="AL"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>E-mail de acesso *</label><input name="email" type="email" required></div>
+      <div class="form-group"><label>Senha inicial *</label><input name="senha" type="password" required></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Plano</label>
+        <select name="plano">
+          <option value="mensal">Mensal</option>
+          <option value="anual">Anual</option>
+          <option value="unico">Licença Única</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Contabilidade responsável</label>
+        <select name="contabilidade_id">
+          <option value="">— Nenhuma —</option>
+          {% for c in contabilidades %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary">Cadastrar Posto</button>
+      <a href="/admin/postos" class="btn btn-outline">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
