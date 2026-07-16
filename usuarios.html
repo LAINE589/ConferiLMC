@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Painel Admin{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <div class="sidebar-sec">Admin</div>
+  <a href="/admin" class="ativo">📊 Dashboard</a>
+  <a href="/admin/contabilidades">🏢 Contabilidades</a>
+  <a href="/admin/postos">⛽ Postos</a>
+  <a href="/admin/usuarios">👤 Usuários</a>
+  <a href="/admin/relatorios">📄 Relatórios</a>
+  <div class="sidebar-sec">Sistema</div>
+  <a href="/sistema">🔍 Conferência</a>
+</div>
+{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:20px;color:var(--azul)">Painel Administrativo</h2>
+<div class="stats-grid" style="margin-bottom:24px">
+  <div class="stat-card"><div class="stat-num">{{ stats.contabilidades }}</div><div class="stat-label">Contabilidades</div></div>
+  <div class="stat-card"><div class="stat-num">{{ stats.postos }}</div><div class="stat-label">Postos Ativos</div></div>
+  <div class="stat-card"><div class="stat-num">{{ stats.usuarios }}</div><div class="stat-label">Usuários</div></div>
+  <div class="stat-card"><div class="stat-num">{{ stats.relatorios }}</div><div class="stat-label">Relatórios Gerados</div></div>
+</div>
+<div class="card">
+  <div class="card-title">Postos Recentes</div>
+  <table>
+    <tr><th>Posto</th><th>CNPJ</th><th>Contabilidade</th><th>Plano</th><th>Status</th><th>Ações</th></tr>
+    {% for p in postos_recentes %}
+    <tr>
+      <td><strong>{{ p.razao_social }}</strong><br><small style="color:#999">{{ p.cidade }}/{{ p.estado }}</small></td>
+      <td>{{ p.cnpj }}</td>
+      <td>{{ p.contabilidade.nome if p.contabilidade else '—' }}</td>
+      <td>{{ p.plano|upper }}</td>
+      <td><span class="badge {{ 'badge-ok' if p.licenca_ativa else 'badge-inativo' }}">{{ 'Ativo' if p.licenca_ativa else 'Inativo' }}</span></td>
+      <td>
+        <a href="/contabilidade/posto/{{ p.id }}/relatorios" class="btn btn-sm btn-outline">📄</a>
+        <a href="/admin/posto/{{ p.id }}/toggle" class="btn btn-sm {{ 'btn-outline' if p.licenca_ativa else 'btn-success' }}">{{ 'Desativar' if p.licenca_ativa else 'Ativar' }}</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" style="text-align:center;color:#999;padding:20px">Nenhum posto cadastrado ainda.</td></tr>
+    {% endfor %}
+  </table>
+  <div style="margin-top:14px;display:flex;gap:8px">
+    <a href="/admin/postos/novo" class="btn btn-primary">+ Novo Posto</a>
+    <a href="/admin/postos" class="btn btn-outline">Ver Todos</a>
+    <a href="/admin/contabilidades/nova" class="btn btn-outline">+ Nova Contabilidade</a>
+  </div>
+</div>
+{% endblock %}

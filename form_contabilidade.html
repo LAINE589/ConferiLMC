@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Postos{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <a href="/admin">📊 Dashboard</a>
+  <a href="/admin/postos" class="ativo">⛽ Postos</a>
+  <a href="/admin/contabilidades">🏢 Contabilidades</a>
+  <a href="/admin/usuarios">👤 Usuários</a>
+  <a href="/admin/relatorios">📄 Relatórios</a>
+</div>
+{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+  <h2 style="color:var(--azul)">Postos Cadastrados ({{ postos|length }})</h2>
+  <a href="/admin/postos/novo" class="btn btn-primary">+ Novo Posto</a>
+</div>
+<div class="card">
+  <table>
+    <tr><th>Posto</th><th>CNPJ</th><th>Contabilidade</th><th>E-mail</th><th>Plano</th><th>Licença</th><th>Relatórios</th><th>Ações</th></tr>
+    {% for p in postos %}
+    <tr>
+      <td><strong>{{ p.razao_social }}</strong><br><small style="color:#999">{{ p.cidade }}/{{ p.estado }}</small></td>
+      <td style="font-family:monospace;font-size:.8rem">{{ p.cnpj }}</td>
+      <td>{{ p.contabilidade.nome if p.contabilidade else '—' }}</td>
+      <td>{{ p.email or '—' }}</td>
+      <td>{{ p.plano|upper }}</td>
+      <td><span class="badge {{ 'badge-ok' if p.licenca_ativa else 'badge-inativo' }}">{{ 'Ativa' if p.licenca_ativa else 'Inativa' }}</span></td>
+      <td style="text-align:center">{{ p.relatorios|length }}</td>
+      <td>
+        <a href="/contabilidade/posto/{{ p.id }}/relatorios" class="btn btn-sm btn-outline">📄</a>
+        <a href="/admin/posto/{{ p.id }}/toggle" class="btn btn-sm {{ 'btn-outline' if p.licenca_ativa else 'btn-success' }}" style="margin-left:4px">
+          {{ '🔒 Desativar' if p.licenca_ativa else '🔓 Ativar' }}
+        </a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" style="text-align:center;color:#999;padding:24px">Nenhum posto cadastrado.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

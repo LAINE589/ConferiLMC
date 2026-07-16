@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Relatórios{% endblock %}
+{% block sidebar %}
+<div class="sidebar">
+  <a href="/admin">📊 Dashboard</a>
+  <a href="/admin/postos">⛽ Postos</a>
+  <a href="/admin/relatorios" class="ativo">📄 Relatórios</a>
+</div>
+{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:20px;color:var(--azul)">Histórico de Relatórios ({{ relatorios|length }})</h2>
+<div class="card">
+  <table>
+    <tr><th>Posto</th><th>Competência</th><th>Gerado em</th><th>Por</th><th>Divergências</th><th>Status</th><th>Download</th></tr>
+    {% for r in relatorios %}
+    <tr>
+      <td><strong>{{ r.posto.razao_social }}</strong></td>
+      <td>{{ r.competencia_ant or '—' }} → {{ r.competencia_atu }}</td>
+      <td>{{ r.gerado_em.strftime('%d/%m/%Y %H:%M') }}</td>
+      <td style="font-size:.78rem;color:#666">{{ r.gerado_por }}</td>
+      <td style="text-align:center">{{ r.total_divergencias }}</td>
+      <td><span class="badge badge-{{ r.status_geral }}">{{ r.status_icone }} {{ r.status_geral|upper }}</span></td>
+      <td>{% if r.arquivo_nome %}<a href="/relatorio/{{ r.id }}/download" class="btn btn-sm btn-outline">⬇️</a>{% else %}—{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" style="text-align:center;color:#999;padding:24px">Nenhum relatório gerado ainda.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
