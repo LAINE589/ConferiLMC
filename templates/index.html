@@ -131,6 +131,11 @@
   </div>
   <div class="header-user">
     <span>👤 {{ nome }}</span>
+    {% if usuario and usuario.is_admin %}
+      <a href="/admin" style="color:#cde;font-size:.82rem;text-decoration:none;margin-right:8px">← Painel Admin</a>
+    {% elif usuario and usuario.is_contabilidade %}
+      <a href="/contabilidade/postos" style="color:#cde;font-size:.82rem;text-decoration:none;margin-right:8px">← Meus Postos</a>
+    {% endif %}
     <a href="/logout" class="btn-logout">Sair</a>
   </div>
 </header>

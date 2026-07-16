@@ -167,11 +167,10 @@ def dashboard():
 @app.route("/sistema")
 @fl_login_required
 def index():
-    """Painel da contabilidade — interface de conferência (sistema original)."""
+    """Painel de conferência — acessível por Admin e Contabilidade."""
     if current_user.is_posto:
         return redirect(url_for("posto_dashboard"))
-    if current_user.is_admin:
-        return redirect(url_for("admin_dashboard"))
+    # Admin e Contabilidade acessam a interface de conferência normalmente
     return render_template("index.html", nome=current_user.nome, usuario=current_user)
 
 
