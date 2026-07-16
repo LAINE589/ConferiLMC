@@ -890,30 +890,73 @@ def ler_sped_bytes(data):
 
 
 def verificar_negativos_bytes(data):
-    """Versão para receber bytes ao invés de caminho de arquivo."""
+    """
+    Verifica valores negativos nos registros 1300/1310/1320.
+    O número real do tanque vem do campo[2] do registro 1310 filho,
+    NÃO do campo[2] do 1300 pai (que é o código do produto no SPED).
+    """
     text = data.decode("latin-1", errors="replace")
     neg_t=[]; neg_b=[]; da=None
+    vals_1300={}   # guarda campos do 1300 atual para usar no 1310
+    tanque_atual=None  # número do tanque resolvido via 1310
+
     for n, linha in enumerate(text.splitlines(), 1):
         c = linha.strip().split("|")
         if len(c)<2: continue
         tp=c[1]
+
         if tp=="1300":
             da=_dt(c[3]) if len(c)>3 else None
-            tanque=_nid(c[2])
-            for idx,nome in CAMPOS_1300.items():
-                if idx>=len(c): continue
-                try:
-                    v=_fl(c[idx])
-                    if v<0: neg_t.append({"tanque":tanque,"data":da,"campo":nome,"valor":v,"linha":n})
-                except: pass
+            # Guardar campos do 1300 para verificação posterior via 1310
+            vals_1300 = {"data": da, "linha": n, "campos": c}
+            tanque_atual = None  # será resolvido no 1310
+
+        elif tp=="1310":
+            # O 1310 traz o número real do tanque em c[2]
+            tanque_atual = _nid(c[2])
+
+            # Verificar campos do 1310 (que têm os valores reais do tanque)
+            tem_campos_proprios = len(c) > 10 and c[3].strip() != ""
+            if tem_campos_proprios:
+                # Usar campos do próprio 1310
+                campos_check = {
+                    3:  "Est. Abertura",
+                    6:  "Saída",
+                    8:  "Evaporação",
+                    9:  "Ajuste",
+                    10: "Est. Fechamento Final",
+                }
+                for idx, nome in campos_check.items():
+                    if idx >= len(c): continue
+                    try:
+                        v = _fl(c[idx])
+                        if v is not None and v < 0:
+                            neg_t.append({"tanque": tanque_atual, "data": da,
+                                          "campo": nome, "valor": v, "linha": n})
+                    except: pass
+            else:
+                # Herdar do 1300 pai — verificar campos do 1300 usando número do 1310
+                c1300 = vals_1300.get("campos", [])
+                for idx, nome in CAMPOS_1300.items():
+                    if idx >= len(c1300): continue
+                    try:
+                        v = _fl(c1300[idx])
+                        if v is not None and v < 0:
+                            neg_t.append({"tanque": tanque_atual, "data": da,
+                                          "campo": nome, "valor": v,
+                                          "linha": vals_1300.get("linha", n)})
+                    except: pass
+
         elif tp=="1320":
             bico=_nid(c[2])
             for idx,nome in CAMPOS_1320.items():
                 if idx>=len(c): continue
                 try:
                     v=_fl(c[idx])
-                    if v<0: neg_b.append({"bico":bico,"data":da,"campo":nome,"valor":v,"linha":n})
+                    if v is not None and v<0:
+                        neg_b.append({"bico":bico,"data":da,"campo":nome,"valor":v,"linha":n})
                 except: pass
+
     return {"tanques": neg_t, "bicos": neg_b}
 
 # Diagnóstico por campo negativo
