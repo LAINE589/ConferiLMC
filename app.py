@@ -1178,238 +1178,190 @@ def _fmt(v, decimais=3):
     except: return str(v)
 
 def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac, info_ant, info_atu):
-    """Aba de relatório de divergências para envio ao cliente."""
+    """Aba de notificação de divergências para envio ao cliente — layout limpo."""
     ws.sheet_view.showGridLines = False
-    r = 1
-    N = 6
 
-    ia = info_ant.get("info", {})
-    iu = info_atu.get("info", {})
-    razao  = ia.get("razao","") or iu.get("razao","")
-    cnpj   = ia.get("cnpj","")  or iu.get("cnpj","")
-    dt_ini = iu.get("dt_ini","")
-    dt_fin = iu.get("dt_fin","")
+    N = 6
+    COLS = {"A":22,"B":18,"C":18,"D":18,"E":18,"F":18}
+    for letra, w in COLS.items():
+        ws.column_dimensions[letra].width = w
+
+    ia = info_ant.get("info", {}); iu = info_atu.get("info", {})
+    razao    = ia.get("razao","") or iu.get("razao","")
+    cnpj_raw = ia.get("cnpj","")  or iu.get("cnpj","")
+    cnpj_fmt = (f"{cnpj_raw[:2]}.{cnpj_raw[2:5]}.{cnpj_raw[5:8]}"
+                f"/{cnpj_raw[8:12]}-{cnpj_raw[12:]}") if len(cnpj_raw)==14 else cnpj_raw
 
     def fmt_comp(dt):
-        meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+        meses=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
         try: return f"{meses[int(dt[2:4])-1]}/{dt[4:]}"
-        except: return dt
+        except: return dt or "—"
 
-    comp_atu = fmt_comp(dt_fin)
+    comp_atu = fmt_comp(iu.get("dt_fin",""))
     comp_ant = fmt_comp(ia.get("dt_fin","")) if ia.get("dt_fin") else None
-    periodo  = f"{dt_ini[:2]}/{dt_ini[2:4]}/{dt_ini[4:]} a {dt_fin[:2]}/{dt_fin[2:4]}/{dt_fin[4:]}" if dt_ini else comp_atu
 
-    # ── Cabeçalho ─────────────────────────────────────────────────────────────
-    _titulo(ws, r, "RELATÓRIO DE DIVERGÊNCIAS – CONFERÊNCIA LMC", N, sz=13)
-    ws.row_dimensions[r].height = 30; r += 1
+    def aplic_brd(r, c1, c2):
+        for col in range(c1, c2+1):
+            ws.cell(row=r, column=col).border = _brd()
 
-    for texto_a, texto_e in [
-        (f"Empresa: {razao}", f"CNPJ: {cnpj}"),
-        (f"Competência: {periodo}", f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}"),
-        ("Elaborado por: Cleodon Contabilidade", ""),
+    def tit(r, texto):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N)
+        c = ws.cell(row=r, column=1, value=texto)
+        c.font = Font(name="Arial", size=12, bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", start_color=C_AZUL_ESC)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[r].height = 28
+        aplic_brd(r, 1, N)
+
+    def subt(r, texto):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N)
+        c = ws.cell(row=r, column=1, value=texto)
+        c.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", start_color=C_AZUL_MED)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[r].height = 22
+        aplic_brd(r, 1, N)
+
+    def cab(r, headers, largs):
+        col = 1
+        for h, larg in zip(headers, largs):
+            if larg > 1:
+                ws.merge_cells(start_row=r, start_column=col, end_row=r, end_column=col+larg-1)
+            c = ws.cell(row=r, column=col, value=h)
+            c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
+            c.fill = PatternFill("solid", start_color="344472")
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            aplic_brd(r, col, col+larg-1)
+            col += larg
+        ws.row_dimensions[r].height = 20
+
+    def lin(r, valores, largs):
+        col = 1
+        for i, (v, larg) in enumerate(zip(valores, largs)):
+            if larg > 1:
+                ws.merge_cells(start_row=r, start_column=col, end_row=r, end_column=col+larg-1)
+            c = ws.cell(row=r, column=col, value=v)
+            c.font = Font(name="Arial", size=9, color="1a2340")
+            c.alignment = Alignment(horizontal="left" if i==0 else "center", vertical="center")
+            aplic_brd(r, col, col+larg-1)
+            col += larg
+        ws.row_dimensions[r].height = 16
+
+    def ok(r, texto):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N)
+        c = ws.cell(row=r, column=1, value=f"✅  {texto}")
+        c.font = Font(name="Arial", size=9, color=C_VERDE_FG)
+        c.fill = PatternFill("solid", start_color=C_VERDE_BG)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[r].height = 18
+        aplic_brd(r, 1, N)
+
+    def fmt_dt(dt):
+        try: return dt.strftime("%d/%m/%Y")
+        except: return str(dt)
+
+    row = 1
+    tit(row, "NOTIFICAÇÃO DE DIVERGÊNCIAS – LIVRO DE MOVIMENTAÇÃO DE COMBUSTÍVEIS")
+    row += 1
+
+    for label, valor in [
+        ("Empresa:", razao),
+        ("CNPJ:", cnpj_fmt),
+        ("Competência:", comp_atu),
+        ("Data:", datetime.now().strftime("%d/%m/%Y")),
     ]:
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
-        c1 = ws.cell(row=r, column=1, value=texto_a)
-        c1.font = Font(name="Arial", size=10, bold=True)
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+        c1 = ws.cell(row=row, column=1, value=label)
+        c1.font = Font(name="Arial", size=9, bold=True, color="555555")
         c1.alignment = Alignment(horizontal="left", vertical="center")
-        ws.merge_cells(start_row=r, start_column=5, end_row=r, end_column=N)
-        c2 = ws.cell(row=r, column=5, value=texto_e)
-        c2.font = Font(name="Arial", size=10, italic=True, color="595959")
-        c2.alignment = Alignment(horizontal="right", vertical="center")
-        ws.row_dimensions[r].height = 16; r += 1
-    r += 1
+        ws.merge_cells(start_row=row, start_column=3, end_row=row, end_column=N)
+        c2 = ws.cell(row=row, column=3, value=valor)
+        c2.font = Font(name="Arial", size=9, bold=(label=="Empresa:"), color="1a2340")
+        c2.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[row].height = 15
+        row += 1
 
-    # Contagem total de divergências encontradas
-    divergencias = []
+    row += 1
 
-    # ── 1. Confronto entre meses ──────────────────────────────────────────────
-    if comp_ant and (conf_m["tanques"] or conf_m["bicos"]):
-        for x in conf_m["tanques"]:
-            if x["status"] != "✅ OK":
-                divergencias.append({
-                    "secao": "Confronto entre meses",
-                    "item": f"Tanque {x['id']}",
-                    "status": x["status"],
-                    "detalhe": (f"Fechamento {comp_ant}: {_fmt(x['fech'])} L  →  "
-                                f"Abertura {comp_atu}: {_fmt(x['aber'])} L  |  "
-                                f"Diferença: {_fmt(x['dif'])} L"),
-                    "orientacao": "Verificar se os estoques foram lançados corretamente no fechamento do mês anterior e na abertura do mês atual.",
-                })
-        for x in conf_m["bicos"]:
-            if x["status"] != "✅ OK":
-                divergencias.append({
-                    "secao": "Confronto entre meses",
-                    "item": f"Bico {x['id']}",
-                    "status": x["status"],
-                    "detalhe": (f"Encerrante final {comp_ant}: {_fmt(x['fech'])}  →  "
-                                f"Encerrante inicial {comp_atu}: {_fmt(x['aber'])}  |  "
-                                f"Diferença: {_fmt(x['dif'])}"),
-                    "orientacao": "Conferir se o encerrante foi relançado corretamente na abertura do mês atual.",
-                })
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=N)
+    intro = ws.cell(row=row, column=1,
+        value=("A seguir, apresentamos as divergências identificadas na conferência do LMC. "
+               "Solicitamos a verificação e o encaminhamento dos arquivos corrigidos. "
+               "Inconsistências no LMC podem acarretar penalidades perante a SEFAZ e a ANP."))
+    intro.font = Font(name="Arial", size=9, italic=True, color="666666")
+    intro.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    ws.row_dimensions[row].height = 30
+    row += 2
 
-    # ── 2. Consistência diária ────────────────────────────────────────────────
-    for x in d_mai["tanques"]:
-        if x["status"] != "✅ OK":
-            divergencias.append({
-                "secao": "Consistência diária",
-                "item": f"Tanque {x['tanque']}",
-                "status": x["status"],
-                "detalhe": (f"Fechamento {x['dia_fech'].strftime('%d/%m/%Y')}: {_fmt(x['fech'])} L  →  "
-                            f"Abertura {x['dia_aber'].strftime('%d/%m/%Y')}: {_fmt(x['aber'])} L  |  "
-                            f"Diferença: {_fmt(x['dif'])} L"),
-                "orientacao": "O estoque de fechamento de um dia deve ser igual ao estoque de abertura do dia seguinte. Verificar lançamento.",
-            })
-    for x in d_mai["bicos"]:
-        if x["status"] != "✅ OK":
-            divergencias.append({
-                "secao": "Consistência diária",
-                "item": f"Bico {x['bico']}",
-                "status": x["status"],
-                "detalhe": (f"Encerrante {x['dia_fech'].strftime('%d/%m/%Y')}: {_fmt(x['fech'])}  →  "
-                            f"Abertura {x['dia_aber'].strftime('%d/%m/%Y')}: {_fmt(x['aber'])}  |  "
-                            f"Diferença: {_fmt(x['dif'])}"),
-                "orientacao": "O encerrante de fechamento deve ser igual ao encerrante de abertura do dia seguinte.",
-            })
+    # 1. Confronto entre meses
+    divs_m = [x for x in conf_m["tanques"] if x["status"]!="✅ OK"]
+    divs_m += [x for x in conf_m["bicos"]  if x["status"]!="✅ OK"]
+    subt(row, f"1.  CONFRONTO ENTRE MESES  ({comp_ant} × {comp_atu})" if comp_ant
+              else f"1.  CONFRONTO ENTRE MESES  – {comp_atu}")
+    row += 1
+    if not divs_m:
+        ok(row, "Fechamento do mês anterior e abertura atual conferidos — sem divergências."); row += 1
+    else:
+        lm = [2,1,2,1]
+        cab(row, ["Tanque/Bico","Fech. Anterior (L)","Aber. Atual (L)","Diferença (L)"], lm); row += 1
+        for x in divs_m:
+            lin(row, [f"Tanque {x['id']}", _fmt(x.get("fech")), _fmt(x.get("aber")), _fmt(x.get("dif"))], lm); row += 1
+    row += 1
 
-    # ── 3. Valores negativos ──────────────────────────────────────────────────
-    todos_neg = (neg_abr["tanques"] + neg_mai["tanques"] +
-                 neg_abr["bicos"]   + neg_mai["bicos"])
-    for x in todos_neg:
-        tipo = "Tanque" if "tanque" in x else "Bico"
-        iid  = x.get("tanque") or x.get("bico")
-        divergencias.append({
-            "secao": "Valores negativos",
-            "item": f"{tipo} {iid}",
-            "status": "❌ NEGATIVO",
-            "detalhe": (f"Data: {x['data'].strftime('%d/%m/%Y') if x.get('data') else 'N/D'}  |  "
-                        f"Campo: {x['campo']}  |  Valor: {_fmt(x['valor'])}"),
-            "orientacao": DIAGNOSTICO_CAMPO.get(x.get("campo",""), "Verificar lançamento deste campo no SPED."),
-        })
+    # 2. Consistência diária
+    divs_d = [x for x in d_mai["tanques"] if x["status"]!="✅ OK"]
+    divs_d += [x for x in d_mai["bicos"]  if x["status"]!="✅ OK"]
+    subt(row, f"2.  CONSISTÊNCIA DIÁRIA – {comp_atu}"); row += 1
+    if not divs_d:
+        ok(row, "Todas as transições diárias (fechamento → abertura) conferidas — sem divergências."); row += 1
+    else:
+        ld = [1,1,1,1,1,1]
+        cab(row, ["Tanque","Data Fech.","Fechamento (L)","Data Aber.","Abertura (L)","Diferença (L)"], ld); row += 1
+        for x in divs_d:
+            id_key = "tanque" if "tanque" in x else "bico"
+            lin(row, [f"Tanque {x[id_key]}", fmt_dt(x["dia_fech"]), _fmt(x["fech"]),
+                      fmt_dt(x["dia_aber"]), _fmt(x["aber"]), _fmt(x["dif"])], ld); row += 1
+    row += 1
 
-    # ── 4. Versão e capacidade ────────────────────────────────────────────────
-    if not vc_mai["versao_ok"]:
-        divergencias.append({
-            "secao": "Versão do SPED",
-            "item": "Registro 0000",
-            "status": "❌ VERSÃO INCORRETA",
-            "detalhe": f"Versão declarada: {vc_mai['versao']}  |  Versão obrigatória: {VERSAO_OBRIGATORIA}",
-            "orientacao": f"O SPED deve ser transmitido na versão {VERSAO_OBRIGATORIA}. Corrigir e retificar.",
-        })
-    for t in vc_mai["tanques"]:
-        if t["status"] != "✅ OK":
-            divergencias.append({
-                "secao": "Capacidade dos tanques",
-                "item": f"Tanque {t['tanque']}",
-                "status": t["status"],
-                "detalhe": t["obs"],
-                "orientacao": "A capacidade do tanque deve ser declarada corretamente no registro 1310 do SPED.",
-            })
+    # 3. ANP
+    divs_anp = [t for t in conf_m["tanques"] if t.get("status_anp","") not in ("✅ DENTRO DO LIMITE","")]
+    subt(row, "3.  LIMITE DE VARIAÇÃO ANP (0,6%)"); row += 1
+    if not divs_anp:
+        ok(row, "Todos os tanques dentro do limite de variação de 0,6% permitido pela ANP."); row += 1
+    else:
+        la = [2,1,1,1,1]
+        cab(row, ["Tanque","Recebimento (L)","Variação (L)","Limite (L)","% Variação"], la); row += 1
+        for t in divs_anp:
+            lin(row, [f"Tanque {t['id']}", _fmt(t.get("total_rec") or 0, 0),
+                      _fmt(t.get("diferenca_anp") or 0), _fmt(t.get("limite_anp") or 0, 0),
+                      f"{t.get('pct_anp') or 0:.3f}%"], la); row += 1
+    row += 1
 
-    # ── 5. Limite ANP 0,6% ───────────────────────────────────────────────────
-    for t in conf_m["tanques"]:
-        if t.get("status_anp") and t["status_anp"] != "✅ DENTRO DO LIMITE":
-            d_anp = t.get("diferenca_anp", 0) or 0
-            lim   = t.get("limite_anp", 0) or 0
-            rec   = t.get("total_rec", 0) or 0
-            pct   = t.get("pct_anp", 0) or 0
-            tipo_var = "SOBRA" if d_anp > 0 else "FALTA"
-            divergencias.append({
-                "secao": "Limite ANP 0,6%",
-                "item": f"Tanque {t['id']}",
-                "status": t["status_anp"],
-                "detalhe": (f"{tipo_var} de {_fmt(abs(d_anp))} L  |  "
-                            f"Recebimento: {_fmt(rec)} L  |  "
-                            f"Limite 0,6%: {_fmt(lim)} L  |  "
-                            f"Variação: {_fmt(pct)}%"),
-                "orientacao": (f"A variação de estoque supera o limite de 0,6% do volume recebido permitido pela ANP. "
-                               f"{'Verificar possível entrada não lançada ou venda a maior.' if tipo_var=='SOBRA' else 'Verificar possível venda não registrada, evaporação ou vazamento.'}"),
-            })
+    # 4. Estoque negativo
+    todos_neg = neg_abr["tanques"]+neg_mai["tanques"]+neg_abr["bicos"]+neg_mai["bicos"]
+    subt(row, "4.  ESTOQUE NEGATIVO"); row += 1
+    if not todos_neg:
+        ok(row, "Nenhum valor negativo detectado nos registros do SPED."); row += 1
+    else:
+        ln = [2,1,2,1]
+        cab(row, ["Tanque/Bico","Data","Campo","Valor"], ln); row += 1
+        for x in todos_neg:
+            tipo = "Tanque" if "tanque" in x else "Bico"
+            lin(row, [f"{tipo} {x.get('tanque') or x.get('bico')}",
+                      fmt_dt(x["data"]) if x.get("data") else "—",
+                      x.get("campo",""), _fmt(x.get("valor"))], ln); row += 1
+    row += 2
 
-    # ── 6. DAC × SPED ─────────────────────────────────────────────────────────
-    if conf_dac:
-        for t in conf_dac.get("tanques", []):
-            for tipo_val, val_dac, val_sped, dif, st in [
-                ("Estoque inicial", t["ei_dac"], t["ei_sped"], t["dif_ini"], t["status_ini"]),
-                ("Estoque final",   t["ef_dac"], t["ef_sped"], t["dif_fin"], t["status_fin"]),
-            ]:
-                if st != "✅ OK" and dif is not None and abs(dif) >= 0.01:
-                    divergencias.append({
-                        "secao": "DAC × SPED",
-                        "item": f"Tanque {t['id']} ({t.get('produto','')})",
-                        "status": st,
-                        "detalhe": (f"{tipo_val}  |  DAC: {_fmt(val_dac)} L  |  "
-                                    f"SPED: {_fmt(val_sped)} L  |  Diferença: {_fmt(dif)} L"),
-                        "orientacao": t.get("diagnostico", "Verificar divergência entre o DAC enviado e o SPED transmitido."),
-                    })
-        for b in conf_dac.get("bicos", []):
-            for tipo_val, val_dac, val_sped, dif, st in [
-                ("Enc. inicial", b["ei_dac"], b["ei_sped"], b["dif_ini"], b["status_ini"]),
-                ("Enc. final",   b["ef_dac"], b["ef_sped"], b["dif_fin"], b["status_fin"]),
-            ]:
-                if st != "✅ OK" and dif is not None and abs(dif) >= 0.01:
-                    divergencias.append({
-                        "secao": "DAC × SPED",
-                        "item": f"Bico {b['id']}",
-                        "status": st,
-                        "detalhe": (f"{tipo_val}  |  DAC: {_fmt(val_dac)}  |  "
-                                    f"SPED: {_fmt(val_sped)}  |  Diferença: {_fmt(dif)}"),
-                        "orientacao": "Verificar divergência entre o DAC enviado e o SPED transmitido.",
-                    })
+    ws.merge_cells(start_row=row, start_column=1, end_row=row+1, end_column=N)
+    rod = ws.cell(row=row, column=1,
+        value=("Reforçamos a importância da regularização das divergências dentro do prazo. "
+               "Solicitamos a gentileza de encaminhar os novos SPEDs fiscais com as devidas "
+               "correções para que possamos concluir a conferência."))
+    rod.font = Font(name="Arial", size=9, italic=True, color="666666")
+    rod.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    ws.row_dimensions[row].height = 30
+    aplic_brd(row, 1, N)
 
-    # ── Resumo de status ──────────────────────────────────────────────────────
-    n_div = len(divergencias)
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N)
-    resumo_txt = (f"✅  Nenhuma divergência encontrada — SPED e DAC estão em conformidade."
-                  if n_div == 0
-                  else f"⚠️  {n_div} divergência(s) encontrada(s) — verificar itens abaixo.")
-    c_res = ws.cell(row=r, column=1, value=resumo_txt)
-    c_res.font = Font(name="Arial", bold=True, size=11,
-                      color=C_VERDE_FG if n_div==0 else C_VERM_FG)
-    c_res.fill = PatternFill("solid",
-                             start_color=C_VERDE_BG if n_div==0 else C_AMAR_BG)
-    c_res.alignment = Alignment(horizontal="left", vertical="center")
-    c_res.border = _brd()
-    ws.row_dimensions[r].height = 22; r += 2
-
-    if n_div == 0:
-        for i, w in enumerate([20, 20, 20, 30, 30, 50], 1):
-            ws.column_dimensions[get_column_letter(i)].width = w
-        return
-
-    # ── Tabela de divergências ─────────────────────────────────────────────────
-    for i, h in enumerate(["Seção", "Item", "Status", "Detalhe", "Orientação ao Cliente"], 1):
-        _ch(ws, r, i, h)
-    ws.row_dimensions[r].height = 24; r += 1
-
-    secao_atual = None
-    for div in divergencias:
-        if div["secao"] != secao_atual:
-            secao_atual = div["secao"]
-            _subtit(ws, r, secao_atual, N); r += 1
-
-        st = div["status"]
-        bg = (C_VERM_BG if "❌" in st else C_AMAR_BG)
-        fg = (C_VERM_FG if "❌" in st else C_AMAR_FG)
-
-        _dc(ws, r, 1, div["secao"], bg=bg)
-        _dc(ws, r, 2, div["item"],   bg=bg)
-        cel_st = ws.cell(row=r, column=3, value=st)
-        cel_st.font = Font(name="Arial", bold=True, size=10, color=fg)
-        cel_st.fill = PatternFill("solid", start_color=bg)
-        cel_st.alignment = Alignment(horizontal="center", vertical="center")
-        cel_st.border = _brd()
-
-        for col, txt in [(4, div["detalhe"]), (5, div["orientacao"])]:
-            cel = ws.cell(row=r, column=col, value=txt)
-            cel.font = Font(name="Arial", size=9)
-            cel.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-            cel.border = _brd()
-            cel.fill = PatternFill("solid", start_color=bg)
-
-        ws.row_dimensions[r].height = 36; r += 1
-
-    for i, w in enumerate([22, 18, 22, 55, 60], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
 
 
 # ═════════════════════════════════════════════════════════════════════════════
