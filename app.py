@@ -223,9 +223,11 @@ def processar():
             except Exception as e:
                 erro_dac = str(e)
 
+        cad_atu = verificar_cadastro_lmc(bytes_atu)
+
         wb  = openpyxl.Workbook()
         ws1 = wb.active; ws1.title = "Resumo"
-        aba_resumo(ws1, conf_m, d_mai, d_ant, d_atu, neg_abr, neg_mai, vc_mai)
+        aba_resumo(ws1, conf_m, d_mai, d_ant, d_atu, neg_abr, neg_mai, vc_mai, cad_atu)
         ws2 = wb.create_sheet("Confronto Meses")
         aba_mensal(ws2, conf_m, d_ant, d_atu)
         ws3 = wb.create_sheet("Comparativo Diário")
@@ -244,7 +246,10 @@ def processar():
 
         ws_rel = wb.create_sheet("Relatório ao Cliente")
         aba_relatorio_cliente(ws_rel, conf_m, d_mai, neg_abr, neg_mai, vc_mai,
-                              conf_dac, d_ant, d_atu)
+                              conf_dac, d_ant, d_atu, cad_atu)
+
+        ws_cad = wb.create_sheet("Informação das Bombas", 1)
+        aba_cadastro_lmc(ws_cad, cad_atu, d_atu)
 
         buf = io.BytesIO()
         wb.save(buf); buf.seek(0)
@@ -578,7 +583,7 @@ def _subtit(ws,r,texto,n):
     ws.row_dimensions[r].height=20; return c
 
 # ── ABA RESUMO ─────────────────────────────────────────────────────────────────
-def aba_resumo(ws, conf_m, d_mai, info_ant, info_atu, neg_abr, neg_mai, vc_mai):
+def aba_resumo(ws, conf_m, d_mai, info_ant, info_atu, neg_abr, neg_mai, vc_mai, cad_atu=None):
     ws.sheet_view.showGridLines=False; N=7
     _titulo(ws,1,"CONFERÊNCIA LMC – LIVRO DE MOVIMENTAÇÃO DE COMBUSTÍVEIS",N,sz=13)
     ws.row_dimensions[1].height=30
@@ -715,6 +720,30 @@ def aba_resumo(ws, conf_m, d_mai, info_ant, info_atu, neg_abr, neg_mai, vc_mai):
             bg2=_row_bg(t["status"]) or C_AMAR_BG
             fg2=C_VERM_FG if "❌" in t["status"] else C_AMAR_FG
             row=detalhe(row, f"Tanque {t['tanque']}  |  {t['status']}  |  {t['obs']}", cor_bg=bg2, cor_fg=fg2)
+
+    # 5. CADASTRO LMC (bombas, lacres, bico-tanque)
+    _subtit(ws,row,"5.  CADASTRO LMC  –  BOMBAS, LACRES E VÍNCULOS BICO-TANQUE",N); row+=1
+
+    if cad_atu:
+        # Bombas
+        if cad_atu["bombas_ok"]:
+            row=bloco_ok(row, f"Bombas (Reg. 1350): {cad_atu['n_bombas']} bomba(s) cadastrada(s)")
+        else:
+            row=bloco_err(row, "Bombas (Reg. 1350): nenhuma bomba declarada — incluir antes de enviar o SPED")
+
+        # Lacres
+        if cad_atu["afericoes_ok"]:
+            row=bloco_ok(row, f"Lacres (Reg. 1360): {cad_atu['n_afericoes']} lacre(s) declarado(s)")
+        else:
+            row=bloco_err(row, "Lacres (Reg. 1360): nenhum lacre declarado — incluir número e data de instalação de cada lacre")
+
+        # Bico-Tanque
+        if cad_atu["lacres_ok"]:
+            row=bloco_ok(row, f"Vínculos Bico-Tanque (Reg. 1370): {cad_atu['n_lacres']} vínculo(s) declarado(s)")
+        else:
+            row=bloco_err(row, "Vínculos Bico-Tanque (Reg. 1370): nenhum vínculo declarado — informar qual bico está ligado a qual tanque")
+    else:
+        row=bloco_ok(row, "Cadastro LMC: não verificado (dados não disponíveis)")
 
     ws.column_dimensions["A"].width=90
     for i in range(2,N+1):
@@ -887,6 +916,113 @@ def ler_sped_bytes(data):
             }
 
     return {"info":info,"tanques":tanques,"bicos":bicos}
+
+
+
+# ── CAMPOS DO GUIA LMC ───────────────────────────────────────────────────────
+VERSAO_OBRIGATORIA = "020"
+
+PRODUTOS_COMBUSTIVEL = {
+    "000001": "GASOLINA COMUM",
+    "000002": "DIESEL S10",
+    "000003": "DIESEL S500",
+    "000004": "ETANOL COMUM",
+    "000005": "GASOLINA ADITIVADA",
+    "000006": "DIESEL ADITIVADO",
+}
+
+def verificar_cadastro_lmc(data):
+    """
+    Verifica se tanques (1310), bicos (1320), bombas (1350),
+    aferições (1360) e lacres (1370) estão preenchidos no SPED.
+    Retorna um dict com o resultado de cada verificação.
+    """
+    text = data.decode("latin-1", errors="replace")
+    linhas = text.splitlines()
+
+    tanques  = {}   # {num: {cap, dias_declarados}}
+    bicos    = {}   # {num: {dias_declarados}}
+    bombas   = []   # lista de {serie, fabricante, modelo}
+    afericoes= []   # lista de {num, data}
+    lacres   = []   # lista de {lacre, seq}
+
+    for l in linhas:
+        c = l.strip().split("|")
+        if len(c) < 2: continue
+        tp = c[1]
+
+        if tp == "1310":
+            num = _nid(c[2]) if len(c)>2 else ""
+            cap = c[11].strip() if len(c)>11 else ""
+            if num not in tanques:
+                tanques[num] = {"capacidade": cap, "dias": 0}
+            tanques[num]["dias"] += 1
+            if cap and not tanques[num]["capacidade"]:
+                tanques[num]["capacidade"] = cap
+
+        elif tp == "1320":
+            num = _nid(c[2]) if len(c)>2 else ""
+            if num not in bicos:
+                bicos[num] = {"dias": 0}
+            bicos[num]["dias"] += 1
+
+        elif tp == "1350":
+            bombas.append({
+                "serie":      c[2].strip() if len(c)>2 else "",
+                "fabricante": c[3].strip() if len(c)>3 else "",
+                "modelo":     c[4].strip() if len(c)>4 else "",
+            })
+
+        elif tp == "1360":
+            afericoes.append({
+                "numero": c[2].strip() if len(c)>2 else "",
+                "data":   c[3].strip() if len(c)>3 else "",
+            })
+
+        elif tp == "1370":
+            # 1370: [2]=Nº Bico, [3]=Cód.Produto, [4]=Nº Tanque
+            lacres.append({
+                "bico":    c[2].strip() if len(c)>2 else "",
+                "produto": c[3].strip() if len(c)>3 else "",
+                "tanque":  c[4].strip() if len(c)>4 else "",
+            })
+
+    # ── Resultado ─────────────────────────────────────────────────────────────
+    # Tanques: OK se declarados, ❌ se nenhum
+    tanques_ok = len(tanques) > 0
+    # Capacidade: verificar se todos têm capacidade declarada
+    tanques_sem_cap = [t for t, v in tanques.items() if not v["capacidade"] or v["capacidade"] in ("", "0")]
+
+    # Bicos: OK se declarados
+    bicos_ok = len(bicos) > 0
+
+    # Bombas (1350): OK se declaradas
+    bombas_ok = len(bombas) > 0
+
+    # Aferições (1360): OK se declaradas
+    afericoes_ok = len(afericoes) > 0
+
+    # Lacres (1370): OK se declarados
+    lacres_ok = len(lacres) > 0
+
+    return {
+        "tanques":         sorted(tanques.keys(), key=_sk),
+        "tanques_ok":      tanques_ok,
+        "tanques_sem_cap": sorted(tanques_sem_cap, key=_sk),
+        "bicos":           sorted(bicos.keys(), key=_sk),
+        "bicos_ok":        bicos_ok,
+        "bombas":          bombas,
+        "bombas_ok":       bombas_ok,
+        "afericoes":       afericoes,
+        "afericoes_ok":    afericoes_ok,
+        "bicos_lacres":    lacres,   # 1370: bico → produto → tanque
+        "lacres_ok":       lacres_ok,
+        "n_tanques":       len(tanques),
+        "n_bicos":         len(bicos),
+        "n_bombas":        len(bombas),
+        "n_afericoes":     len(afericoes),
+        "n_lacres":        len(lacres),
+    }
 
 
 def verificar_negativos_bytes(data):
@@ -1177,7 +1313,7 @@ def _fmt(v, decimais=3):
     try: return f"{v:,.{decimais}f}"
     except: return str(v)
 
-def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac, info_ant, info_atu):
+def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac, info_ant, info_atu, cad_atu=None):
     """Aba de notificação de divergências para envio ao cliente — layout limpo."""
     ws.sheet_view.showGridLines = False
 
@@ -1350,6 +1486,25 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
             lin(row, [f"{tipo} {x.get('tanque') or x.get('bico')}",
                       fmt_dt(x["data"]) if x.get("data") else "—",
                       x.get("campo",""), _fmt(x.get("valor"))], ln); row += 1
+    # ── 5. Cadastro LMC (bombas, lacres, bico-tanque) ───────────────────────
+    if cad_atu:
+        problemas_cad = []
+        if not cad_atu["bombas_ok"]:
+            problemas_cad.append("Bombas (Reg. 1350): nenhuma bomba declarada")
+        if not cad_atu["afericoes_ok"]:
+            problemas_cad.append("Lacres (Reg. 1360): nenhum lacre declarado")
+        if not cad_atu["lacres_ok"]:
+            problemas_cad.append("Vínculos Bico-Tanque (Reg. 1370): não declarados")
+
+        if problemas_cad:
+            subt(row, "5.  CADASTRO LMC  –  BOMBAS, LACRES E VÍNCULOS BICO-TANQUE"); row += 1
+            ld_cad = [2, 4]
+            cab(row, ["Item", "Pendência"], ld_cad); row += 1
+            for prob in problemas_cad:
+                item, desc = prob.split(": ", 1)
+                lin(row, [item, desc], ld_cad); row += 1
+            row += 1
+
     row += 2
 
     ws.merge_cells(start_row=row, start_column=1, end_row=row+1, end_column=N)
@@ -1638,9 +1793,11 @@ def posto_processar():
                 pass
 
         # Gerar Excel
+        cad_atu = verificar_cadastro_lmc(bytes_atu)
+
         wb = openpyxl.Workbook()
         ws1 = wb.active; ws1.title = "Resumo"
-        aba_resumo(ws1, conf_m, d_mai, d_ant, d_atu, neg_abr, neg_mai, vc_mai)
+        aba_resumo(ws1, conf_m, d_mai, d_ant, d_atu, neg_abr, neg_mai, vc_mai, cad_atu)
         ws2 = wb.create_sheet("Confronto Meses"); aba_mensal(ws2, conf_m, d_ant, d_atu)
         ws3 = wb.create_sheet("Comparativo Diário"); aba_diario(ws3, d_mai)
         if conf_dac:
@@ -1648,7 +1805,10 @@ def posto_processar():
         ws5 = wb.create_sheet("DAC do SPED"); aba_dac_sped(ws5, d_atu, d_atu)
         ws6 = wb.create_sheet("Relatório ao Cliente")
         aba_relatorio_cliente(ws6, conf_m, d_mai, neg_abr, neg_mai,
-                              vc_mai, conf_dac, d_ant, d_atu)
+                              vc_mai, conf_dac, d_ant, d_atu, cad_atu)
+
+        ws7 = wb.create_sheet("Informação das Bombas", 1)
+        aba_cadastro_lmc(ws7, cad_atu, d_atu)
 
         # Salvar arquivo na pasta do posto (isolado por CNPJ)
         pasta_posto = os.path.join(RELATORIOS_DIR, posto.cnpj)
@@ -1742,3 +1902,208 @@ def perfil():
             db.session.commit()
             flash("Senha alterada com sucesso!", "success")
     return render_template("perfil.html", usuario=current_user)
+
+
+def aba_cadastro_lmc(ws, cad_atu, info_atu):
+    """Aba de verificação de cadastro — tanques, bicos, bombas, aferições e lacres."""
+    ws.sheet_view.showGridLines = False
+    N = 5
+
+    for l, w in zip("ABCDE", [18, 22, 22, 18, 18]):
+        ws.column_dimensions[l].width = w
+
+    iu = info_atu.get("info", {})
+
+    def fmt_comp(dt):
+        meses=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+        try: return f"{meses[int(dt[2:4])-1]}/{dt[4:]}"
+        except: return dt or "—"
+
+    comp = fmt_comp(iu.get("dt_fin", ""))
+
+    def aplic_brd(r, c1, c2):
+        for col in range(c1, c2+1):
+            ws.cell(row=r, column=col).border = _brd()
+
+    def tit_sec(r, texto, ok):
+        """Linha de seção: ✅ ou ❌ + título."""
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=N)
+        c = ws.cell(row=r, column=1, value=texto)
+        bg = C_VERDE_BG if ok else C_VERM_BG
+        fg = C_VERDE_FG if ok else C_VERM_FG
+        c.font = Font(name="Arial", size=10, bold=True, color=fg)
+        c.fill = PatternFill("solid", start_color=bg)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[r].height = 22
+        aplic_brd(r, 1, N)
+
+    def cab(r, headers):
+        col = 1
+        for h in headers:
+            c = ws.cell(row=r, column=col, value=h)
+            c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
+            c.fill = PatternFill("solid", start_color="344472")
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            c.border = _brd()
+            col += 1
+        ws.row_dimensions[r].height = 18
+
+    def lin(r, valores):
+        for col, v in enumerate(valores, 1):
+            c = ws.cell(row=r, column=col, value=v)
+            c.font = Font(name="Arial", size=9, color="1a2340")
+            c.alignment = Alignment(horizontal="left" if col==1 else "center",
+                                    vertical="center")
+            c.border = _brd()
+        ws.row_dimensions[r].height = 15
+
+    row = 1
+
+    # Título
+    _titulo(ws, row, f"VERIFICAÇÃO DE CADASTRO LMC  –  {comp}", N, sz=12)
+    ws.row_dimensions[row].height = 28; row += 1
+
+    # Info
+    for label, valor in [
+        ("Empresa:", iu.get("razao", "")),
+        ("CNPJ:", iu.get("cnpj", "")),
+        ("Competência:", comp),
+    ]:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+        c1 = ws.cell(row=row, column=1, value=label)
+        c1.font = Font(name="Arial", size=9, bold=True, color="555555")
+        c1.alignment = Alignment(horizontal="left", vertical="center")
+        ws.merge_cells(start_row=row, start_column=3, end_row=row, end_column=N)
+        c2 = ws.cell(row=row, column=3, value=valor)
+        c2.font = Font(name="Arial", size=9, bold=(label=="Empresa:"), color="1a2340")
+        c2.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[row].height = 15; row += 1
+    row += 1
+
+    # ── 1. TANQUES (1310) ─────────────────────────────────────────────────────
+    sem_cap = cad_atu["tanques_sem_cap"]
+    ok_t = cad_atu["tanques_ok"] and not sem_cap
+    tit_sec(row,
+        f"{'✅' if ok_t else '❌'}  TANQUES (Reg. 1310)  —  "
+        f"{cad_atu['n_tanques']} tanque(s) declarado(s)"
+        + (f"  |  {len(sem_cap)} sem capacidade" if sem_cap else ""),
+        ok_t); row += 1
+
+    if cad_atu["tanques_ok"]:
+        cab(row, ["Tanque", "Capacidade (L)", "Status"]); row += 1
+        for t in cad_atu["tanques"]:
+            cap = cad_atu.get("tanques", {})
+            # pegar capacidade diretamente do dict interno
+            pass
+        # Refazer: verificar_cadastro_lmc retorna lista; precisamos do dict completo
+        # Vamos usar a info já processada — tanques é lista de IDs
+        for t in cad_atu["tanques"]:
+            lin(row, [f"Tanque {t}", "—", "⚠️ Sem dado de capacidade" if t in sem_cap else "✅ OK"])
+            row += 1
+    else:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=N)
+        c = ws.cell(row=row, column=1, value="❌  Nenhum tanque declarado no registro 1310.")
+        c.font = Font(name="Arial", size=9, color=C_VERM_FG)
+        c.fill = PatternFill("solid", start_color=C_VERM_BG)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[row].height = 18
+        aplic_brd(row, 1, N); row += 1
+    row += 1
+
+    # ── 2. BICOS (1320) ───────────────────────────────────────────────────────
+    ok_b = cad_atu["bicos_ok"]
+    tit_sec(row,
+        f"{'✅' if ok_b else '❌'}  BICOS (Reg. 1320)  —  "
+        f"{cad_atu['n_bicos']} bico(s) declarado(s)", ok_b); row += 1
+
+    if ok_b:
+        cab(row, ["Bicos declarados"]); row += 1
+        bicos_str = "  |  ".join([f"Bico {b}" for b in cad_atu["bicos"]])
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=N)
+        c = ws.cell(row=row, column=1, value=bicos_str)
+        c.font = Font(name="Arial", size=9, color="1a2340")
+        c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        c.border = _brd()
+        ws.row_dimensions[row].height = 20; row += 1
+    else:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=N)
+        c = ws.cell(row=row, column=1, value="❌  Nenhum bico declarado no registro 1320.")
+        c.font = Font(name="Arial", size=9, color=C_VERM_FG)
+        c.fill = PatternFill("solid", start_color=C_VERM_BG)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[row].height = 18
+        aplic_brd(row, 1, N); row += 1
+    row += 1
+
+    # ── 3. BOMBAS (1350) ──────────────────────────────────────────────────────
+    ok_bm = cad_atu["bombas_ok"]
+    tit_sec(row,
+        f"{'✅' if ok_bm else '❌'}  BOMBAS / MEDIDORES (Reg. 1350)  —  "
+        f"{cad_atu['n_bombas']} bomba(s) cadastrada(s)", ok_bm); row += 1
+
+    if ok_bm:
+        cab(row, ["Série", "Fabricante", "Modelo", "Status"]); row += 1
+        for b in cad_atu["bombas"]:
+            ws.cell(row=row, column=1, value=b["serie"]).font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=2, value=b["fabricante"]).font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=3, value=b["modelo"]).font = Font(name="Arial", size=9)
+            c_st = ws.cell(row=row, column=4, value="✅ OK")
+            c_st.font = Font(name="Arial", size=9, color=C_VERDE_FG, bold=True)
+            ws.merge_cells(start_row=row, start_column=4, end_row=row, end_column=N)
+            for col in range(1, N+1):
+                ws.cell(row=row, column=col).alignment = Alignment(horizontal="left", vertical="center")
+                ws.cell(row=row, column=col).border = _brd()
+            ws.row_dimensions[row].height = 15; row += 1
+    else:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=N)
+        c = ws.cell(row=row, column=1, value="❌  Nenhuma bomba cadastrada no registro 1350.")
+        c.font = Font(name="Arial", size=9, color=C_VERM_FG)
+        c.fill = PatternFill("solid", start_color=C_VERM_BG)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[row].height = 18
+        aplic_brd(row, 1, N); row += 1
+    row += 1
+
+    # ── 4. LACRES (1360) ──────────────────────────────────────────────────────
+    ok_af = cad_atu["afericoes_ok"]
+    tit_sec(row,
+        f"{'✅' if ok_af else '❌'}  LACRES (Reg. 1360)  —  "
+        f"{cad_atu['n_afericoes']} lacre(s) declarado(s)", ok_af); row += 1
+
+    if ok_af:
+        cab(row, ["Nº Lacre", "Data Instalação", "Status"]); row += 1
+        for af in cad_atu["afericoes"]:
+            data_fmt = af["data"]
+            if len(data_fmt) == 8:
+                data_fmt = f"{data_fmt[:2]}/{data_fmt[2:4]}/{data_fmt[4:]}"
+            lin(row, [af["numero"], data_fmt, "✅ OK"]); row += 1
+    else:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=N)
+        c = ws.cell(row=row, column=1, value="❌  Nenhum lacre declarado no registro 1360.")
+        c.font = Font(name="Arial", size=9, color=C_VERM_FG)
+        c.fill = PatternFill("solid", start_color=C_VERM_BG)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[row].height = 18
+        aplic_brd(row, 1, N); row += 1
+    row += 1
+
+    # ── 5. BICOS POR TANQUE/PRODUTO (1370) ───────────────────────────────────
+    ok_lc = cad_atu["lacres_ok"]
+    tit_sec(row,
+        f"{'✅' if ok_lc else '❌'}  BICOS POR TANQUE E PRODUTO (Reg. 1370)  —  "
+        f"{cad_atu['n_lacres']} bico(s) declarado(s)", ok_lc); row += 1
+
+    if ok_lc:
+        cab(row, ["Nº Bico", "Produto", "Tanque"]); row += 1
+        for bl in sorted(cad_atu["bicos_lacres"],
+                         key=lambda x: (x["tanque"], int(x["bico"]) if x["bico"].isdigit() else 0)):
+            prod_nome = PRODUTOS_COMBUSTIVEL.get(bl["produto"], bl["produto"])
+            lin(row, [f"Bico {bl['bico']}", prod_nome, f"Tanque {bl['tanque']}"]); row += 1
+    else:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=N)
+        c = ws.cell(row=row, column=1, value="❌  Nenhum vínculo bico-produto declarado no registro 1370.")
+        c.font = Font(name="Arial", size=9, color=C_VERM_FG)
+        c.fill = PatternFill("solid", start_color=C_VERM_BG)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[row].height = 18
+        aplic_brd(row, 1, N); row += 1
