@@ -2157,15 +2157,19 @@ def recebimento():
                             s = Side(style='thin', color='D0D8E4')
                             return Border(left=s, right=s, top=s, bottom=s)
 
-                        # Título
-                        ws.merge_cells('A1:H1')
-                        c = ws.cell(row=1, column=1, value="ACOMPANHAMENTO DE RECEBIMENTO DE COMBUSTÍVEIS")
+                        # Título no modelo do cliente (rosa/magenta)
+                        empresa_titulo = dac_data.get('empresa','') or ''
+                        comp_titulo    = dac_data.get('competencia','') or ''
+                        ws.merge_cells('A1:E1')
+                        c = ws.cell(row=1, column=1,
+                            value=f"{empresa_titulo}  {comp_titulo}".strip())
                         c.font = Font(name="Arial", size=12, bold=True, color="FFFFFF")
-                        c.fill = PatternFill("solid", start_color="1F3864")
+                        c.fill = PatternFill("solid", start_color="CC0066")
                         c.alignment = Alignment(horizontal="center", vertical="center")
+                        for col in range(1,6): ws.cell(row=1,column=col).border = brd()
                         ws.row_dimensions[1].height = 26
 
-                        # Info
+                        # Info (linhas 2-4 removidas — título já tem empresa e competência)
                         for i, (label, valor) in enumerate([
                             ("Empresa:", dac_data.get('empresa','')),
                             ("Competência DAC:", dac_data.get('competencia','')),
@@ -2175,20 +2179,18 @@ def recebimento():
                             c1 = ws.cell(row=i, column=1, value=label)
                             c1.font = Font(name="Arial", size=9, bold=True, color="555555")
                             c1.alignment = Alignment(horizontal="left", vertical="center")
-                            ws.merge_cells(start_row=i, start_column=3, end_row=i, end_column=8)
+                            ws.merge_cells(start_row=i, start_column=3, end_row=i, end_column=5)
                             c2 = ws.cell(row=i, column=3, value=valor)
                             c2.font = Font(name="Arial", size=9, color="1a2340")
                             c2.alignment = Alignment(horizontal="left", vertical="center")
                             ws.row_dimensions[i].height = 15
 
                         # Cabeçalho tabela
-                        headers = ["Produto", "Qtd. Notas (L)", "Recebido DAC (L)",
-                                   "Diferença (L)", "Faltas/Sobras DAC (L)",
-                                   "Est. Abertura (L)", "Est. Fechamento (L)", "Status"]
+                        headers = ["PRODUTO", "NOTAS (L)", "DAC (L)", "PERDA (L)", "GANHO (L)"]
                         for col, h in enumerate(headers, 1):
                             c = ws.cell(row=5, column=col, value=h)
                             c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
-                            c.fill = PatternFill("solid", start_color="344472")
+                            c.fill = PatternFill("solid", start_color="990066")
                             c.alignment = Alignment(horizontal="center", vertical="center")
                             c.border = brd()
                         ws.row_dimensions[5].height = 20
@@ -2204,16 +2206,13 @@ def recebimento():
                                 c.border = brd()
                                 if fmt: c.number_format = fmt
                             cel(1, l['produto'])
-                            cel(2, l['qtd_notas'],   '#,##0.000')
-                            cel(3, l['rec_dac'],     '#,##0.000')
-                            cel(4, l['diferenca'],   '#,##0.000')
-                            cel(5, l['faltas_sobras'], '#,##0.000')
-                            cel(6, l['est_aber'],    '#,##0.000')
-                            cel(7, l['est_fech'],    '#,##0.000')
-                            cel(8, l['status'])
+                            cel(2, l['qtd_notas'] or 0, '#,##0.00')
+                            cel(3, l['rec_dac']   or 0, '#,##0.00')
+                            cel(4, l['perda']     or 0, '#,##0.00')
+                            cel(5, l['ganho']     or 0, '#,##0.00')
                             ws.row_dimensions[i].height = 15
 
-                        for col, w in zip("ABCDEFGH", [28,16,16,14,20,16,16,16]):
+                        for col, w in zip("ABCDE", [28,16,16,16,16]):
                             ws.column_dimensions[col].width = w
 
                         # Notas detalhadas
