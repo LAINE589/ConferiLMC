@@ -2107,3 +2107,163 @@ def aba_cadastro_lmc(ws, cad_atu, info_atu):
         c.alignment = Alignment(horizontal="left", vertical="center")
         ws.row_dimensions[row].height = 18
         aplic_brd(row, 1, N); row += 1
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ACOMPANHAMENTO DE RECEBIMENTO DE COMBUSTÍVEIS
+# ═════════════════════════════════════════════════════════════════════════════
+from recebimento import ler_notas_xls, ler_estoque_dac, confrontar_recebimento
+
+@app.route("/recebimento", methods=["GET", "POST"])
+@fl_login_required
+def recebimento():
+    if current_user.is_posto:
+        return redirect(url_for("posto_dashboard"))
+
+    resultado = None
+    erro = None
+
+    if request.method == "POST":
+        arq_notas = request.files.get("notas")
+        arq_dac   = request.files.get("dac")
+
+        if not arq_notas or not arq_dac:
+            erro = "Selecione os dois arquivos (Excel de notas e PDF do DAC)."
+        else:
+            try:
+                bytes_notas = arq_notas.read()
+                bytes_dac   = arq_dac.read()
+
+                notas_data, err1 = ler_notas_xls(bytes_notas, arq_notas.filename)
+                dac_data,   err2 = ler_estoque_dac(bytes_dac, arq_dac.filename)
+
+                if err1: erro = f"Erro ao ler notas: {err1}"
+                elif err2: erro = f"Erro ao ler DAC: {err2}"
+                else:
+                    linhas = confrontar_recebimento(notas_data, dac_data)
+
+                    # Opção de download Excel
+                    if request.form.get("acao") == "download":
+                        import openpyxl
+                        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+                        from openpyxl.utils import get_column_letter
+
+                        wb = openpyxl.Workbook()
+                        ws = wb.active
+                        ws.title = "Recebimento"
+                        ws.sheet_view.showGridLines = False
+
+                        def brd():
+                            s = Side(style='thin', color='D0D8E4')
+                            return Border(left=s, right=s, top=s, bottom=s)
+
+                        # Título
+                        ws.merge_cells('A1:H1')
+                        c = ws.cell(row=1, column=1, value="ACOMPANHAMENTO DE RECEBIMENTO DE COMBUSTÍVEIS")
+                        c.font = Font(name="Arial", size=12, bold=True, color="FFFFFF")
+                        c.fill = PatternFill("solid", start_color="1F3864")
+                        c.alignment = Alignment(horizontal="center", vertical="center")
+                        ws.row_dimensions[1].height = 26
+
+                        # Info
+                        for i, (label, valor) in enumerate([
+                            ("Empresa:", dac_data.get('empresa','')),
+                            ("Competência DAC:", dac_data.get('competencia','')),
+                            ("Gerado em:", datetime.now().strftime('%d/%m/%Y %H:%M')),
+                        ], 2):
+                            ws.merge_cells(start_row=i, start_column=1, end_row=i, end_column=2)
+                            c1 = ws.cell(row=i, column=1, value=label)
+                            c1.font = Font(name="Arial", size=9, bold=True, color="555555")
+                            c1.alignment = Alignment(horizontal="left", vertical="center")
+                            ws.merge_cells(start_row=i, start_column=3, end_row=i, end_column=8)
+                            c2 = ws.cell(row=i, column=3, value=valor)
+                            c2.font = Font(name="Arial", size=9, color="1a2340")
+                            c2.alignment = Alignment(horizontal="left", vertical="center")
+                            ws.row_dimensions[i].height = 15
+
+                        # Cabeçalho tabela
+                        headers = ["Produto", "Qtd. Notas (L)", "Recebido DAC (L)",
+                                   "Diferença (L)", "Faltas/Sobras DAC (L)",
+                                   "Est. Abertura (L)", "Est. Fechamento (L)", "Status"]
+                        for col, h in enumerate(headers, 1):
+                            c = ws.cell(row=5, column=col, value=h)
+                            c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
+                            c.fill = PatternFill("solid", start_color="344472")
+                            c.alignment = Alignment(horizontal="center", vertical="center")
+                            c.border = brd()
+                        ws.row_dimensions[5].height = 20
+
+                        # Dados
+                        for i, l in enumerate(linhas, 6):
+                            def cel(col, val, fmt=None):
+                                c = ws.cell(row=i, column=col, value=val)
+                                c.font = Font(name="Arial", size=9, color="1a2340")
+                                c.alignment = Alignment(
+                                    horizontal="left" if col==1 else "center",
+                                    vertical="center")
+                                c.border = brd()
+                                if fmt: c.number_format = fmt
+                            cel(1, l['produto'])
+                            cel(2, l['qtd_notas'],   '#,##0.000')
+                            cel(3, l['rec_dac'],     '#,##0.000')
+                            cel(4, l['diferenca'],   '#,##0.000')
+                            cel(5, l['faltas_sobras'], '#,##0.000')
+                            cel(6, l['est_aber'],    '#,##0.000')
+                            cel(7, l['est_fech'],    '#,##0.000')
+                            cel(8, l['status'])
+                            ws.row_dimensions[i].height = 15
+
+                        for col, w in zip("ABCDEFGH", [28,16,16,14,20,16,16,16]):
+                            ws.column_dimensions[col].width = w
+
+                        # Notas detalhadas
+                        row_n = len(linhas) + 8
+                        ws.merge_cells(start_row=row_n, start_column=1, end_row=row_n, end_column=8)
+                        c = ws.cell(row=row_n, column=1, value="NOTAS FISCAIS DE ENTRADA")
+                        c.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+                        c.fill = PatternFill("solid", start_color="2E75B6")
+                        c.alignment = Alignment(horizontal="left", vertical="center")
+                        ws.row_dimensions[row_n].height = 20
+                        row_n += 1
+
+                        for col, h in enumerate(["NF", "Data", "Produto", "Qtd. (L)"], 1):
+                            c = ws.cell(row=row_n, column=col, value=h)
+                            c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
+                            c.fill = PatternFill("solid", start_color="344472")
+                            c.alignment = Alignment(horizontal="center", vertical="center")
+                            c.border = brd()
+                        row_n += 1
+
+                        for n in notas_data['notas']:
+                            ws.cell(row=row_n, column=1, value=n['nf']).border = brd()
+                            ws.cell(row=row_n, column=2, value=n['data'].strftime('%d/%m/%Y') if n['data'] else '').border = brd()
+                            ws.cell(row=row_n, column=3, value=n['produto']).border = brd()
+                            c_q = ws.cell(row=row_n, column=4, value=n['quantidade'])
+                            c_q.number_format = '#,##0.000'; c_q.border = brd()
+                            for col in range(1, 5):
+                                ws.cell(row=row_n, column=col).font = Font(name="Arial", size=9)
+                                ws.cell(row=row_n, column=col).alignment = Alignment(
+                                    horizontal="left" if col in (1,2,3) else "center",
+                                    vertical="center")
+                            ws.row_dimensions[row_n].height = 14
+                            row_n += 1
+
+                        buf = io.BytesIO()
+                        wb.save(buf); buf.seek(0)
+                        nome_dl = f"Recebimento_{dac_data.get('competencia','').replace('/','_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                        return send_file(buf,
+                            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            as_attachment=True, download_name=nome_dl)
+
+                    resultado = {
+                        'linhas':      linhas,
+                        'notas':       notas_data['notas'],
+                        'totais':      notas_data['totais'],
+                        'competencia': dac_data.get('competencia', ''),
+                        'empresa':     dac_data.get('empresa', ''),
+                    }
+            except Exception as e:
+                erro = f"Erro ao processar: {str(e)}"
+
+    return render_template("recebimento.html",
+                           resultado=resultado, erro=erro, usuario=current_user)
