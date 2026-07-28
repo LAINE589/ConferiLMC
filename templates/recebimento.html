@@ -176,42 +176,20 @@
       <thead>
         <tr>
           <th>Produto</th>
-          <th>Qtd. Notas (L)</th>
-          <th>Recebido DAC (L)</th>
-          <th>Diferença (L)</th>
-          <th>Faltas/Sobras DAC (L)</th>
-          <th>Est. Abertura (L)</th>
-          <th>Est. Fechamento (L)</th>
-          <th>Status</th>
+          <th>NOTAS (L)</th>
+          <th>DAC (L)</th>
+          <th>PERDA (L)</th>
+          <th>GANHO (L)</th>
         </tr>
       </thead>
       <tbody>
         {% for l in resultado.linhas %}
         <tr>
           <td>{{ l.produto }}</td>
-          <td>{{ "{:,.3f}".format(l.qtd_notas) if l.qtd_notas else "—" }}</td>
-          <td>{{ "{:,.3f}".format(l.rec_dac) if l.rec_dac else "—" }}</td>
-          <td>
-            {% if l.diferenca is not none %}
-              <strong style="color:{{ '#375623' if l.diferenca|abs < 0.01 else '#9C0006' }}">
-                {{ "{:,.3f}".format(l.diferenca) }}
-              </strong>
-            {% else %}—{% endif %}
-          </td>
-          <td>
-            {% if l.faltas_sobras is not none %}
-              <strong style="color:{{ '#9C0006' if l.faltas_sobras < -0.01 else '#375623' }}">
-                {{ "{:,.3f}".format(l.faltas_sobras) }}
-              </strong>
-            {% else %}—{% endif %}
-          </td>
-          <td>{{ "{:,.3f}".format(l.est_aber) if l.est_aber is not none else "—" }}</td>
-          <td>{{ "{:,.3f}".format(l.est_fech) if l.est_fech is not none else "—" }}</td>
-          <td>
-            <span class="tag {{ 'tag-ok' if '✅' in l.status else 'tag-alerta' if '⚠️' in l.status else 'tag-sem' }}">
-              {{ l.status }}
-            </span>
-          </td>
+          <td>{{ "{:,.2f}".format(l.qtd_notas) if l.qtd_notas else "—" }}</td>
+          <td>{{ "{:,.2f}".format(l.rec_dac) if l.rec_dac else "0,00" }}</td>
+          <td style="color:#9C0006;font-weight:600">{{ "{:,.2f}".format(l.perda) if l.perda else "0,00" }}</td>
+          <td style="color:#375623;font-weight:600">{{ "{:,.2f}".format(l.ganho) if l.ganho else "0,00" }}</td>
         </tr>
         {% endfor %}
       </tbody>
