@@ -152,10 +152,14 @@ def ler_estoque_dac(arquivo_bytes, filename):
         try: competencia = f"{meses[int(dt[3:5])-1]}/{dt[6:]}"
         except: competencia = dt
 
-    # Empresa
+    # Nome da empresa
     empresa = ""
-    m2 = re.search(r'([\w\s]+LTDA|[\w\s]+EIRELI|[\w\s]+EPP|[\w\s]+ME|[\w\s]+S\.?A\.?)\s', texto, re.I)
-    if m2: empresa = m2.group(1).strip()
+    m_emp = re.search(r"Resumo\s+DAC\s*\n\s*(.+?)\s+Emiss", texto, re.I)
+    if m_emp:
+        empresa = m_emp.group(1).strip()
+    else:
+        m2 = re.search(r"([\w\s]+(?:LTDA|EIRELI|EPP|ME))", texto, re.I)
+        if m2: empresa = m2.group(1).strip()
 
     # Extrair Estoque Físico
     num = r'-?[\d\.]+,\d+'

@@ -583,10 +583,26 @@ def _subtit(ws,r,texto,n):
     ws.row_dimensions[r].height=20; return c
 
 # ── ABA RESUMO ─────────────────────────────────────────────────────────────────
+def _inserir_logo(ws, ancora="A1", altura=36):
+    """Insere a logo da Cleodon Contabilidade na célula indicada."""
+    try:
+        from openpyxl.drawing.image import Image as XlImage
+        logo_path = os.path.join(os.path.dirname(__file__), "static", "logo_excel.png")
+        if os.path.exists(logo_path):
+            logo = XlImage(logo_path)
+            logo.width  = int(altura * 0.97)
+            logo.height = altura
+            logo.anchor = ancora
+            ws.add_image(logo)
+    except Exception:
+        pass
+
 def aba_resumo(ws, conf_m, d_mai, info_ant, info_atu, neg_abr, neg_mai, vc_mai, cad_atu=None):
     ws.sheet_view.showGridLines=False; N=7
     _titulo(ws,1,"CONFERÊNCIA LMC – LIVRO DE MOVIMENTAÇÃO DE COMBUSTÍVEIS",N,sz=13)
-    ws.row_dimensions[1].height=30
+    ws.row_dimensions[1].height=40
+    # Logo no canto direito do cabeçalho
+    _inserir_logo(ws, "G1")
     ia=info_ant["info"]; iu=info_atu["info"]
     razao_emp = ia.get('razao','') or iu.get('razao','')
     cnpj_emp  = ia.get('cnpj','')  or iu.get('cnpj','')
@@ -1398,6 +1414,7 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
 
     row = 1
     tit(row, "NOTIFICAÇÃO DE DIVERGÊNCIAS – LIVRO DE MOVIMENTAÇÃO DE COMBUSTÍVEIS")
+    _inserir_logo(ws, f"{get_column_letter(N)}{row}", altura=34)
     row += 1
 
     for label, valor in [
@@ -2157,7 +2174,7 @@ def recebimento():
                             s = Side(style='thin', color='D0D8E4')
                             return Border(left=s, right=s, top=s, bottom=s)
 
-                        # Título no modelo do cliente (rosa/magenta)
+                        # Título linha 1: Nome da empresa + Competência
                         empresa_titulo = dac_data.get('empresa','') or ''
                         comp_titulo    = dac_data.get('competencia','') or ''
                         ws.merge_cells('A1:E1')
@@ -2168,22 +2185,6 @@ def recebimento():
                         c.alignment = Alignment(horizontal="center", vertical="center")
                         for col in range(1,6): ws.cell(row=1,column=col).border = brd()
                         ws.row_dimensions[1].height = 26
-
-                        # Info (linhas 2-4 removidas — título já tem empresa e competência)
-                        for i, (label, valor) in enumerate([
-                            ("Empresa:", dac_data.get('empresa','')),
-                            ("Competência DAC:", dac_data.get('competencia','')),
-                            ("Gerado em:", datetime.now().strftime('%d/%m/%Y %H:%M')),
-                        ], 2):
-                            ws.merge_cells(start_row=i, start_column=1, end_row=i, end_column=2)
-                            c1 = ws.cell(row=i, column=1, value=label)
-                            c1.font = Font(name="Arial", size=9, bold=True, color="555555")
-                            c1.alignment = Alignment(horizontal="left", vertical="center")
-                            ws.merge_cells(start_row=i, start_column=3, end_row=i, end_column=5)
-                            c2 = ws.cell(row=i, column=3, value=valor)
-                            c2.font = Font(name="Arial", size=9, color="1a2340")
-                            c2.alignment = Alignment(horizontal="left", vertical="center")
-                            ws.row_dimensions[i].height = 15
 
                         # Cabeçalho tabela
                         headers = ["PRODUTO", "NOTAS (L)", "DAC (L)", "PERDA (L)", "GANHO (L)"]
@@ -2216,12 +2217,13 @@ def recebimento():
                             ws.column_dimensions[col].width = w
 
                         # Notas detalhadas
-                        row_n = len(linhas) + 8
-                        ws.merge_cells(start_row=row_n, start_column=1, end_row=row_n, end_column=8)
+                        row_n = len(linhas) + 4  # 1 título + 1 cabeçalho + n dados + 1 espaço
+                        ws.merge_cells(start_row=row_n, start_column=1, end_row=row_n, end_column=4)
                         c = ws.cell(row=row_n, column=1, value="NOTAS FISCAIS DE ENTRADA")
                         c.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-                        c.fill = PatternFill("solid", start_color="2E75B6")
+                        c.fill = PatternFill("solid", start_color="990066")
                         c.alignment = Alignment(horizontal="left", vertical="center")
+                        for col in range(1,5): ws.cell(row=row_n,column=col).border = brd()
                         ws.row_dimensions[row_n].height = 20
                         row_n += 1
 
