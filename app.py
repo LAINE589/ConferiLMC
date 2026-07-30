@@ -2171,66 +2171,65 @@ def recebimento():
                         ws.sheet_view.showGridLines = False
 
                         def brd():
-                            s = Side(style='thin', color='D0D8E4')
+                            s = Side(style='thin', color='DDDDDD')
                             return Border(left=s, right=s, top=s, bottom=s)
 
-                        # Título linha 1: Nome da empresa + Competência
+                        for col, w in zip("ABCDE", [24,12,12,10,12]):
+                            ws.column_dimensions[col].width = w
+
                         empresa_titulo = dac_data.get('empresa','') or ''
                         comp_titulo    = dac_data.get('competencia','') or ''
+
+                        # Linha 1: Título
                         ws.merge_cells('A1:E1')
                         c = ws.cell(row=1, column=1,
                             value=f"{empresa_titulo}  {comp_titulo}".strip())
-                        c.font = Font(name="Arial", size=12, bold=True, color="FFFFFF")
-                        c.fill = PatternFill("solid", start_color="CC0066")
+                        c.font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
+                        c.fill = PatternFill("solid", start_color="FF3399")
                         c.alignment = Alignment(horizontal="center", vertical="center")
                         for col in range(1,6): ws.cell(row=1,column=col).border = brd()
-                        ws.row_dimensions[1].height = 26
+                        ws.row_dimensions[1].height = 22
 
-                        # Cabeçalho tabela
-                        headers = ["PRODUTO", "NOTAS (L)", "DAC (L)", "PERDA (L)", "GANHO (L)"]
-                        for col, h in enumerate(headers, 1):
-                            c = ws.cell(row=5, column=col, value=h)
-                            c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
-                            c.fill = PatternFill("solid", start_color="990066")
+                        # Linha 2: Cabeçalho
+                        for col, h in enumerate(["PRODUTO","NOTAS","DAC","PERDA","GANHO"], 1):
+                            c = ws.cell(row=2, column=col, value=h)
+                            c.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+                            c.fill = PatternFill("solid", start_color="CC0066")
                             c.alignment = Alignment(horizontal="center", vertical="center")
                             c.border = brd()
-                        ws.row_dimensions[5].height = 20
+                        ws.row_dimensions[2].height = 18
 
-                        # Dados
-                        for i, l in enumerate(linhas, 6):
-                            def cel(col, val, fmt=None):
-                                c = ws.cell(row=i, column=col, value=val)
-                                c.font = Font(name="Arial", size=9, color="1a2340")
+                        # Linhas 3..: dados — fundo branco, sem alternância
+                        for i, l in enumerate(linhas, 3):
+                            for col, v in enumerate([
+                                l['produto'], l['qtd_notas'] or 0,
+                                l['rec_dac'] or 0, l['perda'] or 0, l['ganho'] or 0
+                            ], 1):
+                                c = ws.cell(row=i, column=col, value=v)
+                                c.font = Font(name="Arial", size=10, color="000000")
+                                c.fill = PatternFill("solid", start_color="FFFFFF")
                                 c.alignment = Alignment(
                                     horizontal="left" if col==1 else "center",
                                     vertical="center")
                                 c.border = brd()
-                                if fmt: c.number_format = fmt
-                            cel(1, l['produto'])
-                            cel(2, l['qtd_notas'] or 0, '#,##0.00')
-                            cel(3, l['rec_dac']   or 0, '#,##0.00')
-                            cel(4, l['perda']     or 0, '#,##0.00')
-                            cel(5, l['ganho']     or 0, '#,##0.00')
-                            ws.row_dimensions[i].height = 15
+                                if col > 1: c.number_format = '#,##0.00'
+                            ws.row_dimensions[i].height = 16
 
-                        for col, w in zip("ABCDE", [28,16,16,16,16]):
-                            ws.column_dimensions[col].width = w
-
-                        # Notas detalhadas
-                        row_n = len(linhas) + 4  # 1 título + 1 cabeçalho + n dados + 1 espaço
+                        # Notas detalhadas — após dados + 1 linha de espaço
+                        row_n = 2 + len(linhas) + 2
                         ws.merge_cells(start_row=row_n, start_column=1, end_row=row_n, end_column=4)
                         c = ws.cell(row=row_n, column=1, value="NOTAS FISCAIS DE ENTRADA")
                         c.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-                        c.fill = PatternFill("solid", start_color="990066")
+                        c.fill = PatternFill("solid", start_color="CC0066")
                         c.alignment = Alignment(horizontal="left", vertical="center")
                         for col in range(1,5): ws.cell(row=row_n,column=col).border = brd()
-                        ws.row_dimensions[row_n].height = 20
+                        ws.row_dimensions[row_n].height = 18
                         row_n += 1
 
                         for col, h in enumerate(["NF", "Data", "Produto", "Qtd. (L)"], 1):
                             c = ws.cell(row=row_n, column=col, value=h)
                             c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
-                            c.fill = PatternFill("solid", start_color="831040")
+                            c.fill = PatternFill("solid", start_color="FF3399")
                             c.alignment = Alignment(horizontal="center", vertical="center")
                             c.border = brd()
                         row_n += 1
