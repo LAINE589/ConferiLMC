@@ -269,7 +269,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-C_AZUL_ESC = "1F3864"; C_AZUL_MED = "2E75B6"
+C_AZUL_ESC = "A81550"; C_AZUL_MED = "C41A60"
 C_VERDE_BG = "C6EFCE"; C_VERDE_FG = "375623"
 C_VERM_BG  = "FFC7CE"; C_VERM_FG  = "9C0006"
 C_AMAR_BG  = "FFEB9C"; C_AMAR_FG  = "7D6608"
@@ -1381,7 +1381,7 @@ def aba_relatorio_cliente(ws, conf_m, d_mai, neg_abr, neg_mai, vc_mai, conf_dac,
                 ws.merge_cells(start_row=r, start_column=col, end_row=r, end_column=col+larg-1)
             c = ws.cell(row=r, column=col, value=h)
             c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
-            c.fill = PatternFill("solid", start_color="344472")
+            c.fill = PatternFill("solid", start_color="831040")
             c.alignment = Alignment(horizontal="center", vertical="center")
             aplic_brd(r, col, col+larg-1)
             col += larg
@@ -1959,7 +1959,7 @@ def aba_cadastro_lmc(ws, cad_atu, info_atu):
         for h in headers:
             c = ws.cell(row=r, column=col, value=h)
             c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
-            c.fill = PatternFill("solid", start_color="344472")
+            c.fill = PatternFill("solid", start_color="831040")
             c.alignment = Alignment(horizontal="center", vertical="center")
             c.border = _brd()
             col += 1
@@ -2230,7 +2230,7 @@ def recebimento():
                         for col, h in enumerate(["NF", "Data", "Produto", "Qtd. (L)"], 1):
                             c = ws.cell(row=row_n, column=col, value=h)
                             c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
-                            c.fill = PatternFill("solid", start_color="344472")
+                            c.fill = PatternFill("solid", start_color="831040")
                             c.alignment = Alignment(horizontal="center", vertical="center")
                             c.border = brd()
                         row_n += 1
