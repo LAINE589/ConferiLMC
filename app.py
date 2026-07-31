@@ -2177,7 +2177,9 @@ def recebimento():
                         for col, w in zip("ABCDE", [24,12,12,10,12]):
                             ws.column_dimensions[col].width = w
 
-                        empresa_titulo = dac_data.get('empresa','') or ''
+                        # Preferir nome das notas (mais completo) sobre DAC
+                        empresa_titulo = (notas_data.get('empresa','') or
+                                          dac_data.get('empresa','') or '')
                         comp_titulo    = dac_data.get('competencia','') or ''
 
                         # Linha 1: Título
@@ -2260,7 +2262,8 @@ def recebimento():
                         'notas':       notas_data['notas'],
                         'totais':      notas_data['totais'],
                         'competencia': dac_data.get('competencia', ''),
-                        'empresa':     dac_data.get('empresa', ''),
+                        'empresa':     (notas_data.get('empresa','') or
+                                        dac_data.get('empresa', '')),
                     }
             except Exception as e:
                 erro = f"Erro ao processar: {str(e)}"

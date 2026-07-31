@@ -10,16 +10,19 @@ from datetime import datetime
 
 # ── Normalização de nomes de produtos ─────────────────────────────────────────
 MAPA_PRODUTO = [
-    # ETANOL — sempre normaliza para ETANOL HIDRATADO COMUM
-    (['ETANOL HIDRATADO', 'ETANOL COMUM', 'ETANOL'], 'ETANOL HIDRATADO COMUM'),
+    # ÁLCOOL / ETANOL — qualquer variação vira ETANOL HIDRATADO COMUM
+    (['ONU 1170', 'ALCOOL', 'ÁLCOOL', 'ETANOL HIDRATADO', 'ETANOL COMUM',
+      'ETANOL', 'AEHC', 'AEAC'], 'ETANOL HIDRATADO COMUM'),
 
-    # GASOLINA ADITIVADA — verificar ANTES de gasolina comum para capturar "C ADIT"
+    # GASOLINA ADITIVADA — verificar ANTES de gasolina comum
     (['GASOLINA COMUM C ADITIVADA', 'GASOLINA COMUM ADITIVADA',
       'GASOLINA COMUM C ADIT', 'GASOLINA C ADITIVADA',
-      'GASOLINA ADITIVADA', 'GASOLINA C ADIT', 'GASOLINA ADIT'], 'GASOLINA ADITIVADA'),
+      'GASOLINA ADITIVADA', 'GASOLINA C ADIT', 'GASOLINA ADIT',
+      'GASOLINA TIPO C ADITIVADA', 'GASOLINA TIPO C ADIT'], 'GASOLINA ADITIVADA'),
 
-    # GASOLINA COMUM
-    (['GASOLINA COMUM C', 'GASOLINA COMUM', 'GASOLINA C'], 'GASOLINA COMUM'),
+    # GASOLINA COMUM — qualquer "GASOLINA TIPO C", "GASOLINA C" sem aditivada
+    (['GASOLINA TIPO C GRANEL', 'GASOLINA TIPO C', 'GASOLINA TIPO',
+      'GASOLINA COMUM C', 'GASOLINA COMUM', 'GASOLINA C'], 'GASOLINA COMUM'),
 
     # DIESEL S500
     (['DIESEL B S500', 'DIESEL S500', 'OLEO DIESEL B S500',
@@ -156,6 +159,8 @@ def ler_notas_xls(arquivo_bytes, filename):
     Detecta formato automaticamente (XLS/XLSX) e usa LibreOffice como fallback.
     """
     notas = []
+    empresa = ''
+    cnpj = ''
 
     # Detectar formato pelo magic bytes
     is_xlsx = arquivo_bytes[:2] == b'PK'
@@ -174,7 +179,7 @@ def ler_notas_xls(arquivo_bytes, filename):
                 return None, "Não foi possível ler o arquivo Excel. Tente exportar em outro formato."
 
         # Detectar colunas pelo cabeçalho
-        col_op=0; col_nf=1; col_data=2; col_prod=8; col_qtd=15; col_unit=16
+        col_op=0; col_nf=1; col_data=2; col_prod=8; col_qtd=15; col_unit=16; col_cfop=6
 
         for row in rows:
             def s(v): return str(v).strip() if v is not None else ''
@@ -182,8 +187,12 @@ def ler_notas_xls(arquivo_bytes, filename):
             if not vals or not vals[0]: continue
 
             # Metadados
-            if vals[0].startswith('Empresa:'): continue
-            if vals[0].startswith('CNPJ:'): continue
+            if vals[0].startswith('Empresa:'):
+                empresa = vals[0].replace('Empresa:', '').strip()
+                continue
+            if vals[0].startswith('CNPJ:'):
+                cnpj = vals[0].replace('CNPJ:', '').strip()
+                continue
 
             # Detectar linha de cabeçalho
             v0 = vals[0].lower()
@@ -193,6 +202,7 @@ def ler_notas_xls(arquivo_bytes, filename):
                     if v in ('operação','operacao','tipo','op.'): col_op = ci
                     elif v in ('nº nf-e','nf','nf-e','número','numero','nº nf'): col_nf = ci
                     elif v == 'data': col_data = ci
+                    elif v == 'cfop': col_cfop = ci
                     elif ('nome' in v and 'produto' in v) or ('produto' in v and 'cod' not in v and 'ncm' not in v and 'valor' not in v and col_prod == 8): col_prod = ci
                     elif v in ('quant.','quantidade','qtd','qtde'): col_qtd = ci
                     elif v in ('fator unit.','unidade','un','unit','und'): col_unit = ci
@@ -202,6 +212,13 @@ def ler_notas_xls(arquivo_bytes, filename):
             if vals[col_op].lower() != 'entrada': continue
 
             try:
+                # Filtrar por CFOP: aceitar apenas 1652 e 2652 (compra de combustível)
+                cfop_val = s(row[col_cfop]).split('.')[0] if len(row) > col_cfop else ''
+                try:
+                    cfop_int = int(float(cfop_val)) if cfop_val else 0
+                    if cfop_int not in (1652, 2652): continue
+                except: continue
+
                 prod = s(row[col_prod]) if len(row) > col_prod else ''
                 if not prod: continue
                 qtd_raw = row[col_qtd] if len(row) > col_qtd else ''
@@ -254,7 +271,7 @@ def ler_notas_xls(arquivo_bytes, filename):
         p = n['produto']
         totais[p] = totais.get(p, 0) + n['quantidade']
 
-    return {'notas': notas, 'totais': totais}, None
+    return {'notas': notas, 'totais': totais, 'empresa': empresa, 'cnpj': cnpj}, None
 
 
 def ler_estoque_dac(arquivo_bytes, filename):
