@@ -53,77 +53,151 @@ def _xl_date(val):
 
 
 # ── Leitor de Notas Fiscais (Excel .xls / .xlsx) ──────────────────────────────
+def _converter_xls_para_rows(arquivo_bytes):
+    """Converte XLS (qualquer versão) para lista de rows usando LibreOffice como fallback."""
+    # Tentar xlrd primeiro (mais rápido)
+    try:
+        wb = xlrd.open_workbook(file_contents=arquivo_bytes, on_demand=True)
+        ws = wb.sheet_by_index(0)
+        rows = []
+        for r in range(ws.nrows):
+            row = []
+            for c in range(ws.ncols):
+                cell = ws.cell(r, c)
+                if cell.ctype == 3:  # data
+                    row.append(_xl_date(cell.value))
+                elif cell.ctype == 2:  # número
+                    row.append(cell.value)
+                else:
+                    row.append(str(cell.value).strip())
+            rows.append(row)
+        return rows
+    except Exception:
+        pass
+
+    # Fallback: converter via LibreOffice
+    import subprocess, tempfile, glob as _glob, os as _os
+    tmp = tempfile.NamedTemporaryFile(suffix='.xls', delete=False)
+    tmp.write(arquivo_bytes); tmp.close()
+    outdir = tempfile.mkdtemp()
+    subprocess.run(
+        ['python3', '/mnt/skills/public/pptx/scripts/office/soffice.py',
+         '--headless', '--convert-to', 'xlsx', '--outdir', outdir, tmp.name],
+        capture_output=True, timeout=60
+    )
+    _os.unlink(tmp.name)
+    converted = _glob.glob(_os.path.join(outdir, '*.xlsx'))
+    if not converted:
+        return None
+
+    import openpyxl
+    wb2 = openpyxl.load_workbook(converted[0], data_only=True)
+    ws2 = wb2.active
+    rows = []
+    for row in ws2.iter_rows(values_only=True):
+        rows.append([v if v is not None else '' for v in row])
+    return rows
+
+
 def ler_notas_xls(arquivo_bytes, filename):
     """
-    Lê a relação de notas fiscais de entrada e retorna lista de notas e totais por produto.
-    Detecta automaticamente o formato pelo conteúdo (XLS ou XLSX), independente da extensão.
+    Lê a relação de notas fiscais de entrada.
+    Detecta formato automaticamente (XLS/XLSX) e usa LibreOffice como fallback.
     """
     notas = []
 
-    # Detectar formato real pelo magic bytes — não confiar na extensão
-    # XLSX/ZIP começa com PK (0x50 0x4B); XLS/OLE2 começa com D0 CF
+    # Detectar formato pelo magic bytes
     is_xlsx = arquivo_bytes[:2] == b'PK'
     ext = 'xlsx' if is_xlsx else 'xls'
 
     try:
-        if ext == 'xls':
-            wb = xlrd.open_workbook(file_contents=arquivo_bytes)
-            ws = wb.sheet_by_index(0)
-            empresa = ""
-            cnpj = ""
-            for r in range(ws.nrows):
-                row = [str(ws.cell_value(r, c)).strip() for c in range(ws.ncols)]
-                if 'Empresa:' in row[0]: empresa = row[0].replace('Empresa:', '').strip()
-                if 'CNPJ:' in row[0]: cnpj = row[0].replace('CNPJ:', '').strip()
-                if row[0] != 'Entrada': continue
-                try:
-                    nf       = str(ws.cell_value(r, 1)).split('.')[0]
-                    data_val = ws.cell_value(r, 2)
-                    data     = _xl_date(data_val) if isinstance(data_val, float) else None
-                    produto  = str(ws.cell_value(r, 8)).strip()
-                    qtd      = ws.cell_value(r, 15)
-                    unidade  = str(ws.cell_value(r, 16)).strip()
-                    if unidade != 'L': continue  # só litros
-                    notas.append({
-                        'nf': nf, 'data': data,
-                        'produto_raw': produto,
-                        'produto': normalizar_produto(produto),
-                        'quantidade': float(qtd),
-                    })
-                except: continue
-
-        else:  # xlsx
+        if ext == 'xlsx':
             import openpyxl
             wb = openpyxl.load_workbook(io.BytesIO(arquivo_bytes), data_only=True)
             ws = wb.active
-            empresa = ""; cnpj = ""
-            rows = list(ws.iter_rows(values_only=True))
-            for row in rows:
-                vals = [str(v).strip() if v is not None else '' for v in row]
-                if 'Empresa:' in vals[0]: empresa = vals[0].replace('Empresa:', '').strip()
-                if 'CNPJ:' in vals[0]:    cnpj    = vals[0].replace('CNPJ:', '').strip()
-                if vals[0] != 'Entrada': continue
-                try:
-                    produto = str(row[8]).strip()
-                    qtd     = row[15]
-                    unidade = str(row[16]).strip()
-                    if unidade != 'L': continue
-                    notas.append({
-                        'nf': str(row[1]).split('.')[0],
-                        'data': row[2] if isinstance(row[2], datetime) else None,
-                        'produto_raw': produto,
-                        'produto': normalizar_produto(produto),
-                        'quantidade': float(qtd),
-                    })
+            rows = [[v if v is not None else '' for v in row]
+                    for row in ws.iter_rows(values_only=True)]
+        else:
+            rows = _converter_xls_para_rows(arquivo_bytes)
+            if rows is None:
+                return None, "Não foi possível ler o arquivo Excel. Tente exportar em outro formato."
+
+        # Detectar colunas pelo cabeçalho
+        col_op=0; col_nf=1; col_data=2; col_prod=8; col_qtd=15; col_unit=16
+
+        for row in rows:
+            def s(v): return str(v).strip() if v is not None else ''
+            vals = [s(v) for v in row]
+            if not vals or not vals[0]: continue
+
+            # Metadados
+            if vals[0].startswith('Empresa:'): continue
+            if vals[0].startswith('CNPJ:'): continue
+
+            # Detectar linha de cabeçalho
+            v0 = vals[0].lower()
+            if v0 in ('operação','operacao','tipo','op.','operaçao'):
+                for ci, val in enumerate(vals):
+                    v = val.lower().strip()
+                    if v in ('operação','operacao','tipo','op.'): col_op = ci
+                    elif v in ('nº nf-e','nf','nf-e','número','numero','nº nf'): col_nf = ci
+                    elif v == 'data': col_data = ci
+                    elif ('nome' in v and 'produto' in v) or ('produto' in v and 'cod' not in v and 'ncm' not in v and 'valor' not in v and col_prod == 8): col_prod = ci
+                    elif v in ('quant.','quantidade','qtd','qtde'): col_qtd = ci
+                    elif v in ('fator unit.','unidade','un','unit','und'): col_unit = ci
+                continue
+
+            # Linha de dados
+            if vals[col_op].lower() != 'entrada': continue
+
+            try:
+                prod = s(row[col_prod]) if len(row) > col_prod else ''
+                if not prod: continue
+                qtd_raw = row[col_qtd] if len(row) > col_qtd else ''
+                qtd_val = str(qtd_raw).replace(',','.') if qtd_raw != '' else '0'
+                try: qtd = float(qtd_val)
                 except: continue
+                if qtd <= 0: continue
+
+                unit = s(row[col_unit]).upper() if len(row) > col_unit else ''
+                # Aceitar apenas se unidade for L, ou se produto for combustível reconhecido
+                prod_norm_test = normalizar_produto(prod)
+                eh_combustivel = any(c in prod_norm_test.upper() for c in
+                                     ['ETANOL','GASOLINA','DIESEL','GNV'])
+                if unit and unit not in ('L','LT','LTR','LITRO','LITROS'): continue
+                if not unit and not eh_combustivel: continue
+
+                data_val = row[col_data]
+                if isinstance(data_val, datetime):
+                    data = data_val
+                elif isinstance(data_val, float):
+                    data = _xl_date(data_val)
+                elif isinstance(data_val, str) and data_val:
+                    try:
+                        from datetime import datetime as dt2
+                        data = dt2.fromisoformat(data_val.split(' ')[0])
+                    except: data = None
+                else:
+                    data = None
+
+                nf_val = row[col_nf]
+                nf = str(int(nf_val)) if isinstance(nf_val, float) else str(nf_val).split('.')[0]
+
+                prod_norm = normalizar_produto(prod)
+                notas.append({
+                    'nf': nf, 'data': data,
+                    'produto_raw': prod,
+                    'produto': prod_norm,
+                    'quantidade': qtd,
+                })
+            except: continue
 
     except Exception as e:
         return None, str(e)
 
     if not notas:
-        return None, "Nenhuma nota de entrada com litros encontrada."
+        return None, "Nenhuma nota de combustível encontrada. Verifique se o arquivo contém linhas de 'Entrada' com unidade 'L'."
 
-    # Totais por produto
     totais = {}
     for n in notas:
         p = n['produto']
@@ -132,7 +206,6 @@ def ler_notas_xls(arquivo_bytes, filename):
     return {'notas': notas, 'totais': totais}, None
 
 
-# ── Leitor de Estoque Físico do DAC (PDF) ─────────────────────────────────────
 def ler_estoque_dac(arquivo_bytes, filename):
     """
     Lê o Estoque Físico do DAC (PDF Resumo DAC).
