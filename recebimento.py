@@ -54,8 +54,11 @@ def _xl_date(val):
 
 # ── Leitor de Notas Fiscais (Excel .xls / .xlsx) ──────────────────────────────
 def _converter_xls_para_rows(arquivo_bytes):
-    """Converte XLS (qualquer versão) para lista de rows usando LibreOffice como fallback."""
-    # Tentar xlrd primeiro (mais rápido)
+    """
+    Lê XLS via xlrd; se falhar, usa parser BIFF8 nativo que funciona mesmo
+    com arquivos OLE2 inconsistentes (sem necessidade de LibreOffice).
+    """
+    # Tentar xlrd primeiro
     try:
         wb = xlrd.open_workbook(file_contents=arquivo_bytes, on_demand=True)
         ws = wb.sheet_by_index(0)
@@ -64,9 +67,9 @@ def _converter_xls_para_rows(arquivo_bytes):
             row = []
             for c in range(ws.ncols):
                 cell = ws.cell(r, c)
-                if cell.ctype == 3:  # data
+                if cell.ctype == 3:
                     row.append(_xl_date(cell.value))
-                elif cell.ctype == 2:  # número
+                elif cell.ctype == 2:
                     row.append(cell.value)
                 else:
                     row.append(str(cell.value).strip())
@@ -75,28 +78,76 @@ def _converter_xls_para_rows(arquivo_bytes):
     except Exception:
         pass
 
-    # Fallback: converter via LibreOffice
-    import subprocess, tempfile, glob as _glob, os as _os
-    tmp = tempfile.NamedTemporaryFile(suffix='.xls', delete=False)
-    tmp.write(arquivo_bytes); tmp.close()
-    outdir = tempfile.mkdtemp()
-    subprocess.run(
-        ['python3', '/mnt/skills/public/pptx/scripts/office/soffice.py',
-         '--headless', '--convert-to', 'xlsx', '--outdir', outdir, tmp.name],
-        capture_output=True, timeout=60
-    )
-    _os.unlink(tmp.name)
-    converted = _glob.glob(_os.path.join(outdir, '*.xlsx'))
-    if not converted:
-        return None
+    # Fallback: parser BIFF8 nativo via olefile
+    try:
+        import olefile, struct
+        ole = olefile.OleFileIO(io.BytesIO(arquivo_bytes))
+        stream = ole.openstream('Workbook').read()
 
-    import openpyxl
-    wb2 = openpyxl.load_workbook(converted[0], data_only=True)
-    ws2 = wb2.active
-    rows = []
-    for row in ws2.iter_rows(values_only=True):
-        rows.append([v if v is not None else '' for v in row])
-    return rows
+        # Coletar records
+        records = []
+        pos = 0
+        while pos < len(stream) - 4:
+            rt = struct.unpack('<H', stream[pos:pos+2])[0]
+            rs = struct.unpack('<H', stream[pos+2:pos+4])[0]
+            records.append((rt, stream[pos+4:pos+4+rs]))
+            pos += 4 + rs
+
+        # Juntar SST + CONTINUE records
+        sst_data = b''; in_sst = False
+        for rt, data in records:
+            if rt == 0x00FC: sst_data = data; in_sst = True
+            elif rt == 0x003C and in_sst: sst_data += data
+            else: in_sst = False
+
+        # Parsear SST
+        sst = []
+        if len(sst_data) >= 8:
+            unique = struct.unpack('<I', sst_data[4:8])[0]
+            p = 8
+            for _ in range(unique):
+                if p + 2 >= len(sst_data): break
+                slen = struct.unpack('<H', sst_data[p:p+2])[0]
+                flags = sst_data[p+2]; p += 3
+                if flags & 1:
+                    s = sst_data[p:p+slen*2].decode('utf-16-le', errors='replace')
+                    p += slen * 2
+                else:
+                    s = sst_data[p:p+slen].decode('latin-1', errors='replace')
+                    p += slen
+                sst.append(s)
+
+        # Parsear cells
+        grid = {}
+        for rt, data in records:
+            if rt == 0x00FD and len(data) >= 8:  # LabelSst
+                row = struct.unpack('<H', data[0:2])[0]
+                col = struct.unpack('<H', data[2:4])[0]
+                idx = struct.unpack('<I', data[4:8])[0]
+                # LabelSst idx é direto (não tem shift)
+                # Índice SST: os bits altos (>>16) são o índice real neste formato
+                idx_real = idx >> 16 if idx > 0xFFFF else idx
+                grid[(row, col)] = sst[idx_real] if idx_real < len(sst) else ''
+            elif rt == 0x0203 and len(data) >= 14:  # Number
+                row = struct.unpack('<H', data[0:2])[0]
+                col = struct.unpack('<H', data[2:4])[0]
+                grid[(row, col)] = struct.unpack('<d', data[6:14])[0]
+            elif rt == 0x0204 and len(data) >= 8:  # Label (string direta)
+                row = struct.unpack('<H', data[0:2])[0]
+                col = struct.unpack('<H', data[2:4])[0]
+                slen = struct.unpack('<H', data[4:6])[0]
+                s = data[6:6+slen].decode('latin-1', errors='replace')
+                grid[(row, col)] = s
+
+        if not grid: return None
+        max_row = max(r for r,c in grid) + 1
+        max_col = max(c for r,c in grid) + 1
+        rows = []
+        for r in range(max_row):
+            rows.append([grid.get((r, c), '') for c in range(max_col)])
+        return rows
+    except Exception:
+        return None
 
 
 def ler_notas_xls(arquivo_bytes, filename):
