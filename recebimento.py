@@ -56,10 +56,14 @@ def _xl_date(val):
 def ler_notas_xls(arquivo_bytes, filename):
     """
     Lê a relação de notas fiscais de entrada e retorna lista de notas e totais por produto.
-    Suporta .xls e .xlsx.
+    Detecta automaticamente o formato pelo conteúdo (XLS ou XLSX), independente da extensão.
     """
     notas = []
-    ext = filename.lower().rsplit('.', 1)[-1]
+
+    # Detectar formato real pelo magic bytes — não confiar na extensão
+    # XLSX/ZIP começa com PK (0x50 0x4B); XLS/OLE2 começa com D0 CF
+    is_xlsx = arquivo_bytes[:2] == b'PK'
+    ext = 'xlsx' if is_xlsx else 'xls'
 
     try:
         if ext == 'xls':
